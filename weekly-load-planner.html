@@ -372,6 +372,30 @@ const PALETTE = ['#4FD1C5','#E8747C','#5B9BD5','#9D7CD8','#6FCF97','#F2A341','#F
 let uidN = 1;
 function uid(p){ return p + '-' + (uidN++) + '-' + Date.now().toString(36); }
 
+function timeStrToDecimal(t) {
+  if (!t) return null;
+  const [h, m] = t.split(':');
+  return parseInt(h) + (parseInt(m) || 0) / 60;
+}
+
+function decimalToTimeStr(dec) {
+  const h = Math.floor(dec);
+  const m = Math.round((dec - h) * 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+function checkConflict(day, start, end, excludeId = null) {
+  for (const b of visibleBlocks().filter(x => x.day === day && x.id !== excludeId)) {
+    if (Math.max(start, b.start) < Math.min(end, b.end)) return { type: 'block', id: b.id };
+  }
+  for (const k of state.busy) {
+    if (!k.startsWith(day + '-')) continue;
+    const bh = parseInt(k.split('-')[1]);
+    if (Math.max(start, bh) < Math.min(end, bh + 1)) return { type: 'busy' };
+  }
+  return null;
+}
+
 /* ==================== STATE ==================== */
 let state = null;
 
@@ -729,13 +753,6 @@ document.getElementById('add-block-btn').addEventListener('click', ()=>{
   const form = document.createElement('div');
   form.className = 'add-cat-form add-block-form';
   const catOptions = state.categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-  const hourOpts = (sel, upper)=>{
-    let opts='';
-    for(let h=START_HOUR; h<=upper; h++){
-      opts += `<option value="${h}" ${h===sel?'selected':''}>${fmtHour(h)}</option>`;
-    }
-    return opts;
-  };
   const dayChecks = DAYS.map((d,i)=>`
     <label style="flex-direction:column; align-items:center; gap:1px; font-size:9px;">
       <input type="checkbox" class="mb-day-chk" value="${i}" ${i===todayIdx() && isViewingRealToday()?'checked':''}/>${d}
@@ -745,8 +762,8 @@ document.getElementById('add-block-btn').addEventListener('click', ()=>{
     <select id="mb-cat">${catOptions}</select>
     <div class="row" style="justify-content:space-between;">${dayChecks}</div>
     <div class="row">
-      <select id="mb-start">${hourOpts(9, END_HOUR-1)}</select>
-      <select id="mb-end">${hourOpts(10, END_HOUR)}</select>
+      <input type="time" id="mb-start" value="09:00" required />
+      <input type="time" id="mb-end" value="10:00" required />
     </div>
     <select id="mb-repeat">
       <option value="weekly" selected>Repeats every week</option>
@@ -764,8 +781,8 @@ document.getElementById('add-block-btn').addEventListener('click', ()=>{
   document.getElementById('mb-confirm').addEventListener('click', ()=>{
     const catId = document.getElementById('mb-cat').value;
     const days = [...form.querySelectorAll('.mb-day-chk:checked')].map(c=>parseInt(c.value));
-    const start = parseInt(document.getElementById('mb-start').value);
-    const end = parseInt(document.getElementById('mb-end').value);
+    const start = timeStrToDecimal(document.getElementById('mb-start').value);
+    const end = timeStrToDecimal(document.getElementById('mb-end').value);
     const repeat = document.getElementById('mb-repeat').value;
     const locked = document.getElementById('mb-lock').checked;
     const force = document.getElementById('mb-force').checked;
@@ -774,12 +791,11 @@ document.getElementById('add-block-btn').addEventListener('click', ()=>{
     if(days.length===0){ toast('Pick at least one day.', true); return; }
     let placedDays = [], blockedDays = [];
     days.forEach(day=>{
-      let conflict=false;
-      for(let h=start; h<end; h++){ if(isBusy(day,h) || blockAt(day,h)) conflict=true; }
+      const conflict = checkConflict(day, start, end);
       if(conflict && !force){ blockedDays.push(DAYS[day]); return; }
       if(conflict && force){
         // clear whatever occupies that slot on that day (this viewed week's blocks only)
-        for(let h=start; h<end; h++){ state.busy = state.busy.filter(k=>k!==busyKey(day,h)); }
+        for(let h=Math.floor(start); h<Math.ceil(end); h++){ state.busy = state.busy.filter(k=>k!==busyKey(day,h)); }
         state.blocks = state.blocks.filter(b=>{
           if(b.day!==day || !blockVisible(b)) return true;
           return !(b.start<end && b.end>start);
@@ -951,10 +967,35 @@ function renderGrid(){
   }
 }
 
-function fmtHour(h){
-  h = ((h%24)+24)%24;
-  if(h===0) return '12a'; if(h<12) return h+'a'; if(h===12) return '12p'; return (h-12)+'p';
+function fmtHour(hVal){
+  const h = Math.floor(hVal);
+  const m = Math.round((hVal - h) * 60);
+  const mm = m.toString().padStart(2, '0');
+  let hr = ((h % 24) + 24) % 24;
+  const ampm = hr < 12 ? 'a' : 'p';
+  if (hr === 0) hr = 12;
+  else if (hr > 12) hr -= 12;
+  return m === 0 ? `${hr}${ampm}` : `${hr}:${mm}${ampm}`;
 }
+
+function parseHourString(t){
+  if(t===undefined || t===null) return null;
+  t = String(t).trim().toLowerCase();
+  let m = t.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/);
+  if(m){
+     let h = parseInt(m[1]);
+     let min = parseInt(m[2])/60;
+     if(m[3]==='pm' && h<12) h+=12;
+     if(m[3]==='am' && h===12) h=0;
+     return h + min;
+  }
+  m = t.match(/^(\d{1,2})\s*(am|pm)$/);
+  if(m){ let h = parseInt(m[1]); if(m[2]==='pm' && h<12) h+=12; if(m[2]==='am' && h===12) h=0; return h; }
+  m = t.match(/^(\d{1,2})$/);
+  if(m) return parseInt(m[1]);
+  return null;
+}
+
 function hexA(hex, a){
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
   return `rgba(${r},${g},${b},${a})`;
@@ -1047,12 +1088,12 @@ function onDragEnd(e){
   const day = parseInt(col.dataset.day);
   const rect = col.getBoundingClientRect();
   const offsetY = e.clientY - rect.top;
-  let startH = START_HOUR + Math.round(offsetY/ROW_H);
+  let startH = START_HOUR + Math.round((offsetY / ROW_H) * 4) / 4;
   startH = Math.max(START_HOUR, Math.min(END_HOUR-1, startH));
 
   if(dragMode.type==='new'){
     const cat = getCat(dragMode.catId);
-    if(isBusy(day,startH) || blockAt(day,startH)){
+    if(checkConflict(day, startH, startH + 1)){
       toast('That slot is already taken — try another.', true);
     } else {
       state.blocks.push({ id:uid('blk'), catId:cat.id, day, start:startH, end:startH+1, done:false, locked:false, repeat:'weekly' });
@@ -1113,21 +1154,14 @@ function openBlockEditor(blockId){
   const catOptions = state.categories.map(c=>`<option value="${c.id}" ${c.id===blk.catId?'selected':''}>${c.name}</option>`).join('');
   const dayWeekOffset = blk.repeat==='once' ? blk.weekOffset : state.weekOffset;
   const dayOptions = DAYS.map((d,i)=>`<option value="${i}" ${i===blk.day?'selected':''}>${d} \u2014 ${fmtDateShort(dateForDay(dayWeekOffset,i))}</option>`).join('');
-  const hourOpts = (sel)=>{
-    let opts='';
-    for(let h=START_HOUR; h<=END_HOUR; h++){
-      opts += `<option value="${h}" ${h===sel?'selected':''}>${fmtHour(h)}</option>`;
-    }
-    return opts;
-  };
   overlay.innerHTML = `
     <div class="block-edit-modal">
       <h3>Edit block</h3>
       <select id="eb-cat">${catOptions}</select>
       <select id="eb-day">${dayOptions}</select>
       <div class="row">
-        <select id="eb-start">${hourOpts(blk.start)}</select>
-        <select id="eb-end">${hourOpts(blk.end)}</select>
+        <input type="time" id="eb-start" value="${decimalToTimeStr(blk.start)}" required />
+        <input type="time" id="eb-end" value="${decimalToTimeStr(blk.end)}" required />
       </div>
       <select id="eb-repeat">
         <option value="weekly" ${blk.repeat!=='once'?'selected':''}>Repeats every week</option>
@@ -1155,27 +1189,25 @@ function openBlockEditor(blockId){
   document.getElementById('eb-save').addEventListener('click', ()=>{
     const catId = document.getElementById('eb-cat').value;
     const day = parseInt(document.getElementById('eb-day').value);
-    const start = parseInt(document.getElementById('eb-start').value);
-    const end = parseInt(document.getElementById('eb-end').value);
+    const start = timeStrToDecimal(document.getElementById('eb-start').value);
+    const end = timeStrToDecimal(document.getElementById('eb-end').value);
     const repeat = document.getElementById('eb-repeat').value;
     const locked = document.getElementById('eb-lock').checked;
     const done = document.getElementById('eb-done').checked;
     const force = document.getElementById('eb-force').checked;
     if(end<=start){ toast('End time must be after start time.', true); return; }
-    // check conflicts at the new position, excluding this block itself
+
+    const conflict = checkConflict(day, start, end, blk.id);
+    const busyConflict = conflict && conflict.type === 'busy';
     let conflictBlockIds = new Set();
-    let busyConflict = false;
-    for(let h=start; h<end; h++){
-      if(isBusy(day,h)) busyConflict = true;
-      const other = blockAt(day,h);
-      if(other && other.id!==blk.id) conflictBlockIds.add(other.id);
-    }
+    if (conflict && conflict.type === 'block') conflictBlockIds.add(conflict.id);
+
     if((busyConflict || conflictBlockIds.size>0) && !force){
       toast('That time is already taken \u2014 check "Force" to override, or pick another slot.', true);
       return;
     }
     if(force){
-      for(let h=start; h<end; h++){ state.busy = state.busy.filter(k=>k!==busyKey(day,h)); }
+      for(let h=Math.floor(start); h<Math.ceil(end); h++){ state.busy = state.busy.filter(k=>k!==busyKey(day,h)); }
       state.blocks = state.blocks.filter(b=>{
         if(b.id===blk.id) return true;
         if(b.day!==day || !blockVisible(b)) return true;
@@ -1205,17 +1237,6 @@ function buildStateSummary(){
   return `Categories: ${cats}\nReal today is ${DAYS[todayIdx()]}.\nCurrently VIEWING the week of ${fmtWeekLabel(state.weekOffset)} (weekOffset ${state.weekOffset}; 0=the real current week, +1=next week, -1=last week, etc).\nAuto-schedule window: ${fmtHour(state.autoWindow.start)}-${fmtHour(state.autoWindow.end)} (Auto-Schedule and bulk commands only place/move blocks inside this window; pinned blocks are never moved).\nBlocks visible in the currently viewed week: ${blocksTxt || 'none'}`;
 }
 
-function parseHourString(t){
-  if(t===undefined || t===null) return null;
-  t = String(t).trim().toLowerCase();
-  let m = t.match(/^(\d{1,2}):(\d{2})$/);
-  if(m) return parseInt(m[1]);
-  m = t.match(/^(\d{1,2})\s*(am|pm)$/);
-  if(m){ let h = parseInt(m[1])%12; if(m[2]==='pm') h+=12; return h; }
-  m = t.match(/^(\d{1,2})$/);
-  if(m) return parseInt(m[1]);
-  return null;
-}
 function dayNameToIdx(name){
   if(!name) return null;
   name = String(name).toLowerCase();
@@ -1625,3 +1646,4 @@ document.getElementById('theme-toggle').addEventListener('click', ()=>{
 </script>
 </body>
 </html>
+
