@@ -1,0 +1,1933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Weekly Load Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0A1929;
+    --panel: #102A43;
+    --panel-2: #16324F;
+    --grid-line: rgba(255,255,255,0.05);
+    --line: rgba(232,238,245,0.13);
+    --ink: #E8EEF5;
+    --muted: #7C93B3;
+    --accent: #4FD1C5;
+    --accent-dim: #2E8B82;
+    --warn: #F2A341;
+    --danger: #E8747C;
+    --radius: 3px;
+  }
+  body.light{
+    --bg: #EEF2F6;
+    --panel: #FFFFFF;
+    --panel-2: #F4F7FA;
+    --grid-line: rgba(10,25,41,0.05);
+    --line: rgba(10,25,41,0.12);
+    --ink: #0A1929;
+    --muted: #5B6B80;
+    --accent: #17948C;
+    --accent-dim: #0F6B65;
+  }
+  *{box-sizing:border-box;}
+  .hidden{ display:none !important; }
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important;} }
+  html,body{margin:0; height:100%;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    min-height:100vh;
+    transition:background .2s, color .2s;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  button{font-family:inherit; cursor:pointer;}
+  input,select{font-family:inherit;}
+
+  /* ---------- Topbar ---------- */
+  .topbar{
+    position:sticky; top:0; z-index:50;
+    background:var(--panel); border-bottom:1px solid var(--line);
+    padding:10px 12px;
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  }
+  .brand{font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:1.5px; font-weight:600; color:var(--accent); white-space:nowrap;}
+  .brand .sub{display:block; font-size:9px; letter-spacing:0.5px; color:var(--muted); font-weight:400; margin-top:1px;}
+  .cmd-wrap{
+    flex:1 1 220px; min-width:180px;
+    display:flex; align-items:center; gap:6px;
+    background:var(--bg); border:1px solid var(--line); border-radius:var(--radius);
+    padding:6px 8px;
+  }
+  .prompt-caret{color:var(--accent); font-family:'IBM Plex Mono',monospace; font-size:13px;}
+  #cmd-input{
+    flex:1; background:none; border:none; color:var(--ink); font-size:13px; outline:none;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  #cmd-input::placeholder{color:var(--muted);}
+  .btn{
+    background:none; border:1px solid var(--line); color:var(--ink);
+    padding:7px 11px; border-radius:var(--radius); font-size:11px; letter-spacing:0.5px;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .btn:hover{border-color:var(--accent); color:var(--accent);}
+  .btn.primary{border-color:var(--accent-dim); color:var(--accent); background:rgba(79,209,197,0.08);}
+  .btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  .icon-btn{
+    background:none; border:1px solid var(--line); color:var(--muted); border-radius:var(--radius);
+    width:32px; height:32px; font-size:14px; display:flex; align-items:center; justify-content:center;
+  }
+  .icon-btn:hover{color:var(--accent); border-color:var(--accent);}
+  .week-nav{ display:flex; align-items:center; gap:6px; }
+  .week-label{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink); white-space:nowrap; min-width:150px; text-align:center; }
+  .week-nav .icon-btn{ width:28px; height:28px; font-size:13px; }
+  #week-today-btn{ font-size:10px; padding:6px 9px; }
+  #week-today-btn.at-today{ color:var(--accent); border-color:var(--accent-dim); }
+
+  /* ---------- Login ---------- */
+  .login-screen{
+    position:fixed; inset:0; z-index:200;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--bg); padding:16px;
+  }
+  .login-box{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:24px; width:100%; max-width:320px;
+  }
+  .login-input{
+    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--ink);
+    padding:9px 10px; border-radius:var(--radius); font-size:13px; margin-bottom:8px; outline:none;
+  }
+  .login-input:focus{ border-color:var(--accent); }
+  .login-actions{ display:flex; gap:8px; margin-top:10px; }
+  .login-error{
+    color:var(--danger); font-size:11.5px; margin:4px 0 0; font-family:'IBM Plex Mono', monospace;
+  }
+  .login-status{ color:var(--muted); font-size:11px; margin-top:10px; text-align:center; font-family:'IBM Plex Mono', monospace; }
+  .login-divider{
+    display:flex; align-items:center; gap:10px; margin:14px 0;
+    color:var(--muted); font-size:10px; font-family:'IBM Plex Mono', monospace; letter-spacing:1px;
+  }
+  .login-divider::before, .login-divider::after{ content:''; flex:1; height:1px; background:var(--line); }
+
+  /* ---------- Toasts ---------- */
+  #toast-area{
+    position:fixed; top:64px; right:10px; left:10px; z-index:100;
+    display:flex; flex-direction:column; gap:6px; align-items:flex-end; pointer-events:none;
+  }
+  .toast{
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    color:var(--ink); font-size:12px; padding:8px 12px; border-radius:var(--radius);
+    max-width:320px; box-shadow:0 6px 18px rgba(0,0,0,0.3);
+    animation:slidein .25s ease-out;
+  }
+  .toast.warn{border-left-color:var(--warn);}
+  @keyframes slidein{ from{transform:translateY(-8px); opacity:0;} to{transform:translateY(0); opacity:1;} }
+
+  /* ---------- Layout ---------- */
+  .layout{
+    display:flex; flex-direction:column; gap:12px; padding:12px;
+    max-width:1400px; margin:0 auto;
+  }
+  @media (min-width:960px){
+    .layout{ display:grid; grid-template-columns:230px 1fr 260px; align-items:start; }
+  }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; }
+  .panel h2{
+    font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--muted); margin:0 0 10px; padding-bottom:8px; border-bottom:1px solid var(--line);
+  }
+  .panel h2.spaced{margin-top:16px;}
+
+  /* ---------- Categories ---------- */
+  #category-list{ display:flex; flex-direction:column; gap:6px; }
+  .cat-chip{
+    display:flex; align-items:center; gap:8px; padding:7px 8px;
+    border:1px solid var(--line); border-radius:var(--radius); background:var(--panel-2);
+    cursor:grab; touch-action:none; user-select:none;
+  }
+  .cat-chip.dragging{ opacity:0.4; }
+  .cat-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .cat-name{ font-size:12.5px; font-weight:500; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cat-name-input{
+    font-size:12.5px; font-weight:500; flex:1; min-width:0; width:0;
+    background:none; border:1px solid transparent; color:var(--ink); border-radius:2px; padding:2px 3px;
+  }
+  .cat-name-input:hover{ border-color:var(--line); }
+  .cat-name-input:focus{ border-color:var(--accent); outline:none; background:var(--bg); }
+  .cat-edit{ background:none; border:none; font-size:11px; padding:0 2px; opacity:0.7; }
+  .cat-edit:hover{ opacity:1; }
+  .cat-target{
+    width:34px; background:none; border:1px solid var(--line); color:var(--ink);
+    font-size:11px; text-align:center; border-radius:2px; padding:2px 0;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .cat-pri{
+    font-family:'IBM Plex Mono', monospace; font-size:9px; letter-spacing:0.5px;
+    padding:2px 5px; border-radius:2px; border:1px solid var(--line); color:var(--muted); white-space:nowrap;
+  }
+  .cat-pri[data-p="3"]{ color:var(--danger); border-color:var(--danger); }
+  .cat-pri[data-p="2"]{ color:var(--warn); border-color:var(--warn); }
+  .cat-pri[data-p="1"]{ color:var(--muted); }
+  .cat-del{ background:none; border:none; color:var(--muted); font-size:13px; padding:0 2px; }
+  .cat-del:hover{ color:var(--danger); }
+  #add-category-btn{ width:100%; margin-top:8px; }
+
+  .add-cat-form{ display:flex; flex-direction:column; gap:6px; margin-top:8px; padding:8px; border:1px dashed var(--line); border-radius:var(--radius); }
+  .add-cat-form input, .add-cat-form select{
+    background:var(--bg); border:1px solid var(--line); color:var(--ink); border-radius:2px; padding:5px 6px; font-size:12px;
+  }
+  .add-cat-form .row{ display:flex; gap:6px; }
+  .add-cat-form .row button, .add-cat-form .row select{ flex:1; }
+  .add-cat-form label{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); }
+  .add-cat-form label input[type="checkbox"]{ width:auto; }
+
+  /* ---------- Energy grid ---------- */
+  #energy-grid{ display:flex; flex-direction:column; gap:4px; }
+  .energy-row{ display:grid; grid-template-columns:34px repeat(3,1fr); gap:4px; align-items:center; }
+  .energy-row .day-label{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); }
+  .energy-seg{
+    height:20px; border-radius:2px; border:1px solid var(--line); cursor:pointer;
+    font-size:8px; display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono',monospace; letter-spacing:0.5px; color:var(--muted);
+  }
+  .energy-seg[data-lvl="low"]{ background:rgba(124,147,179,0.08); }
+  .energy-seg[data-lvl="med"]{ background:rgba(242,163,65,0.16); color:var(--warn); border-color:var(--warn); }
+  .energy-seg[data-lvl="high"]{ background:rgba(79,209,197,0.16); color:var(--accent); border-color:var(--accent); }
+
+  /* ---------- Auto-schedule / awake window ---------- */
+  #awake-window-grid{ display:flex; flex-direction:column; gap:5px; }
+  .aw-row{ display:flex; align-items:center; gap:6px; font-size:11px; }
+  .aw-row .aw-label{ width:52px; flex-shrink:0; color:var(--muted); }
+  .aw-row input[type="time"]{
+    background:var(--bg); border:1px solid var(--line); color:var(--ink);
+    border-radius:2px; padding:4px 5px; font-size:11px; flex:1; min-width:0;
+  }
+  .aw-row .aw-sep{ color:var(--muted); flex-shrink:0; }
+  .aw-same-toggle{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); margin-bottom:8px; }
+  .aw-same-toggle input{ width:auto; }
+  .hint-text{ font-size:10px; color:var(--muted); margin-top:6px; line-height:1.4; }
+
+  /* ---------- Grid ---------- */
+  .grid-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .grid-scroll{ display:flex; min-width:640px; }
+  .hour-col{ width:42px; flex-shrink:0; }
+  .hour-col .corner{ height:34px; }
+  .hour-label{
+    height:40px; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--muted);
+    display:flex; align-items:flex-start; justify-content:flex-end; padding-right:6px; padding-top:2px;
+  }
+  .days-cols{ display:flex; flex:1; }
+  .day-col-wrap{ flex:1; min-width:84px; }
+  .day-header{
+    height:34px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; letter-spacing:0.5px;
+    border-bottom:1px solid var(--line); border-left:1px solid var(--grid-line);
+  }
+  .day-header .d-sub{ font-size:8px; color:var(--muted); font-weight:400; }
+  .day-col{
+    position:relative; border-left:1px solid var(--grid-line);
+    background-image:repeating-linear-gradient(var(--grid-line) 0 1px, transparent 1px 40px);
+  }
+  .cell-busy{
+    position:absolute; left:0; right:0; height:40px;
+    background:repeating-linear-gradient(45deg, rgba(124,147,179,0.06) 0 6px, transparent 6px 12px);
+    border-top:1px solid var(--grid-line);
+  }
+  .cell-outside-window{
+    position:absolute; left:0; right:0; height:40px;
+    background:repeating-linear-gradient(135deg, rgba(242,163,65,0.05) 0 5px, transparent 5px 10px);
+  }
+  .block{
+    position:absolute; left:2px; right:2px; border-radius:2px;
+    padding:4px 6px; overflow:hidden; cursor:grab; touch-action:none;
+    border-left:3px solid transparent;
+    font-size:10.5px; line-height:1.25;
+    box-shadow:0 1px 3px rgba(0,0,0,0.25);
+    transition:box-shadow .15s, transform .15s;
+  }
+  .block.dragging{ opacity:0.35; }
+  .block.locked{ border-left-style:dashed; outline:1px dashed rgba(242,163,65,0.55); outline-offset:-3px; }
+  .block .b-title{ font-weight:600; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .block .b-time{ font-family:'IBM Plex Mono',monospace; font-size:8.5px; opacity:0.75; }
+  .block.done{ opacity:0.55; }
+  .block.done .b-title::before{ content:'✓ '; }
+  .block-actions{
+    position:absolute; top:2px; right:2px; display:flex; gap:1px;
+  }
+  .b-act{
+    width:14px; height:14px; border-radius:2px; border:none; background:rgba(0,0,0,0.28);
+    color:#fff; font-size:8.5px; line-height:14px; text-align:center; padding:0;
+  }
+  .b-act.pinned{ background:rgba(242,163,65,0.9); color:#1a1a1a; }
+  .drag-clone{
+    position:fixed; z-index:200; pointer-events:none; border-radius:2px;
+    padding:4px 6px; font-size:10.5px; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+    opacity:0.9;
+  }
+
+  /* ---------- Dashboard ---------- */
+  .score-wrap{ display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+  #score-num{ font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:600; color:var(--accent); }
+  #score-label{ font-size:10px; color:var(--muted); letter-spacing:0.5px; }
+  .cat-bar-row{ margin-bottom:9px; }
+  .cat-bar-top{ display:flex; justify-content:space-between; font-size:10.5px; margin-bottom:3px; }
+  .cat-bar-top .nm{ font-weight:500; }
+  .cat-bar-top .hrs{ font-family:'IBM Plex Mono',monospace; color:var(--muted); }
+  .cat-bar-track{ height:6px; border-radius:3px; background:var(--panel-2); overflow:hidden; }
+  .cat-bar-fill{ height:100%; border-radius:3px; transition:width .3s ease; }
+  #active-days{ display:flex; flex-direction:column; gap:5px; margin-top:4px; }
+  .active-row{ display:flex; justify-content:space-between; font-size:11px; }
+  .active-row .n{ font-family:'IBM Plex Mono',monospace; color:var(--accent); }
+  #notifications-list{ display:flex; flex-direction:column; gap:6px; }
+  .notif{
+    font-size:11.5px; padding:7px 8px; border-radius:2px; border-left:3px solid var(--warn);
+    background:var(--panel-2); line-height:1.35;
+  }
+  .notif.ok{ border-left-color:var(--accent); color:var(--muted); }
+  .legend-row{ display:flex; gap:10px; flex-wrap:wrap; font-size:9px; color:var(--muted); font-family:'IBM Plex Mono',monospace; margin-top:10px;}
+  .legend-row span{display:flex;align-items:center;gap:4px;}
+  .legend-dot{width:7px;height:7px;border-radius:50%;display:inline-block;}
+
+  /* ---------- Block edit modal ---------- */
+  #block-edit-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:300;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+  }
+  #block-edit-overlay.hidden{ display:none; }
+  .block-edit-modal{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; width:100%; max-width:320px; display:flex; flex-direction:column; gap:8px;
+  }
+  .block-edit-modal h3{
+    margin:0 0 4px; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:1px;
+    color:var(--muted); text-transform:uppercase;
+  }
+  .block-edit-modal select, .block-edit-modal input[type="text"]{
+    background:var(--bg); border:1px solid var(--line); color:var(--ink); border-radius:2px;
+    padding:6px 7px; font-size:12px; width:100%;
+  }
+  .block-edit-modal label{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted); }
+  .block-edit-modal .row{ display:flex; gap:6px; }
+  .block-edit-modal .row > *{ flex:1; }
+  .block-edit-modal .actions{ display:flex; gap:6px; margin-top:6px; }
+  .block-edit-modal .actions button{ flex:1; }
+  .block-edit-modal .actions .danger{ border-color:var(--danger); color:var(--danger); }
+</style>
+</head>
+<body class="dark">
+
+<div id="login-screen" class="login-screen">
+  <div class="login-box">
+    <div class="brand" style="margin-bottom:16px;">WEEKLY LOAD PLANNER<span class="sub">sign in to sync across your devices</span></div>
+    <input id="login-email" class="login-input mono" type="email" placeholder="email" autocomplete="username" />
+    <input id="login-password" class="login-input mono" type="password" placeholder="password" autocomplete="current-password" />
+    <div id="login-error" class="login-error hidden"></div>
+    <div class="login-actions">
+      <button class="btn primary" id="login-signin-btn" style="flex:1;">Sign in</button>
+      <button class="btn" id="login-signup-btn" style="flex:1;">Create account</button>
+    </div>
+    <div id="login-status" class="login-status"></div>
+    <div class="login-divider"><span>or</span></div>
+    <button class="btn" id="login-google-btn" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
+      <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 6 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.6 18.9 12 24 12c3.1 0 5.8 1.1 8 3l6-6C34.6 6 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.4-1.9 14.1-5.1l-6.5-5.5C29.6 35.1 26.9 36 24 36c-5.3 0-9.7-3.4-11.3-8.1l-6.6 5.1C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.5 5.5C41.3 36 44 30.5 44 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
+      Sign in with Google
+    </button>
+  </div>
+</div>
+
+<div id="app-root" class="hidden">
+<header class="topbar">
+  <div class="brand">WEEKLY LOAD PLANNER<span class="sub">drag blocks · type any command · auto-reflow</span></div>
+  <div class="cmd-wrap">
+    <span class="prompt-caret">›</span>
+    <input id="cmd-input" type="text" placeholder='e.g. "pin gym Mon 6am-7am", "add reading Fri 8-9pm", "I&#39;m only awake 7am-11pm on weekends"' />
+  </div>
+  <button class="btn primary" id="cmd-submit-btn">Run</button>
+  <div class="week-nav">
+    <button class="icon-btn" id="week-prev-btn" title="Previous week">‹</button>
+    <span class="week-label mono" id="week-label"></span>
+    <button class="icon-btn" id="week-next-btn" title="Next week">›</button>
+    <button class="btn" id="week-today-btn" title="Jump back to this week">Today</button>
+  </div>
+  <button class="btn" id="auto-schedule-btn">⟳ Auto-Schedule</button>
+  <button class="icon-btn" id="theme-toggle" title="Toggle theme">◐</button>
+  <button class="btn" id="signout-btn" title="Sign out">Sign out</button>
+</header>
+
+<div id="toast-area"></div>
+<div id="block-edit-overlay" class="hidden"></div>
+
+<div class="layout">
+  <aside class="panel">
+    <h2>Categories</h2>
+    <div id="category-list"></div>
+    <button class="btn" id="add-category-btn" style="width:100%;">+ Add category</button>
+    <button class="btn" id="add-block-btn" style="width:100%; margin-top:8px;">+ Add block manually</button>
+    <h2 class="spaced">Energy by day</h2>
+    <div id="energy-grid"></div>
+    <div class="legend-row">
+      <span><span class="legend-dot" style="background:var(--muted)"></span>low</span>
+      <span><span class="legend-dot" style="background:var(--warn)"></span>med</span>
+      <span><span class="legend-dot" style="background:var(--accent)"></span>high</span>
+    </div>
+    <h2 class="spaced">Available / awake hours</h2>
+    <label class="aw-same-toggle"><input type="checkbox" id="aw-same-toggle"/> Same every day</label>
+    <div id="awake-window-grid"></div>
+    <div class="hint-text">Auto-Schedule and NL commands only place new blocks inside these hours (per day). Striped hours on the grid are outside them. Manual blocks and pinned (📌) blocks are never touched by Auto-Schedule.</div>
+  </aside>
+
+  <main class="panel" style="padding:0;">
+    <div class="grid-wrap">
+      <div class="grid-scroll">
+        <div class="hour-col">
+          <div class="corner"></div>
+          <div id="hour-labels"></div>
+        </div>
+        <div id="days-cols" class="days-cols"></div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="panel">
+    <h2>Dashboard</h2>
+    <div class="score-wrap">
+      <svg width="64" height="64" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r="27" fill="none" stroke="var(--panel-2)" stroke-width="6"/>
+        <circle id="score-ring" cx="32" cy="32" r="27" fill="none" stroke="var(--accent)" stroke-width="6"
+          stroke-dasharray="169.6" stroke-dashoffset="169.6" stroke-linecap="round" transform="rotate(-90 32 32)"
+          style="transition:stroke-dashoffset .5s ease;"/>
+      </svg>
+      <div>
+        <div id="score-num">0</div>
+        <div id="score-label">productivity score</div>
+      </div>
+    </div>
+    <div id="category-bars"></div>
+    <h2 class="spaced">Active days this week</h2>
+    <div id="active-days"></div>
+    <h2 class="spaced">Alerts</h2>
+    <div id="notifications-list"></div>
+  </aside>
+</div>
+</div><!-- /#app-root -->
+
+<!-- Firebase (Auth + Firestore) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* ==================== FIREBASE SETUP ====================
+   Replace this with YOUR project's config object.
+   Find it in the Firebase console: Project settings > General > "Your apps" > SDK setup and config.
+*/
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+let currentUser = null;
+
+function showLoginScreen(){
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('app-root').classList.add('hidden');
+}
+function showApp(){
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app-root').classList.remove('hidden');
+}
+function setLoginError(msg){
+  const el = document.getElementById('login-error');
+  if(!msg){ el.classList.add('hidden'); el.textContent=''; return; }
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function friendlyAuthError(err){
+  const code = err && err.code || '';
+  if(code.includes('wrong-password') || code.includes('invalid-credential')) return 'Incorrect email or password.';
+  if(code.includes('user-not-found')) return 'No account with that email — try "Create account".';
+  if(code.includes('email-already-in-use')) return 'An account with that email already exists — try "Sign in" instead.';
+  if(code.includes('weak-password')) return 'Password should be at least 6 characters.';
+  if(code.includes('invalid-email')) return 'That email address doesn\u2019t look right.';
+  if(code.includes('popup-closed-by-user') || code.includes('cancelled-popup-request')) return null;
+  return (err && err.message) || 'Something went wrong. Try again.';
+}
+
+document.getElementById('login-signin-btn').addEventListener('click', async ()=>{
+  setLoginError(null);
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password){ setLoginError('Enter your email and password.'); return; }
+  try{
+    document.getElementById('login-status').textContent = 'Signing in…';
+    await auth.signInWithEmailAndPassword(email, password);
+  }catch(e){ setLoginError(friendlyAuthError(e)); }
+  finally{ document.getElementById('login-status').textContent = ''; }
+});
+document.getElementById('login-signup-btn').addEventListener('click', async ()=>{
+  setLoginError(null);
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password){ setLoginError('Enter your email and password.'); return; }
+  try{
+    document.getElementById('login-status').textContent = 'Creating account…';
+    await auth.createUserWithEmailAndPassword(email, password);
+  }catch(e){ setLoginError(friendlyAuthError(e)); }
+  finally{ document.getElementById('login-status').textContent = ''; }
+});
+document.getElementById('login-password').addEventListener('keydown', (e)=>{
+  if(e.key==='Enter') document.getElementById('login-signin-btn').click();
+});
+document.getElementById('login-google-btn').addEventListener('click', async ()=>{
+  setLoginError(null);
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try{
+    document.getElementById('login-status').textContent = 'Opening Google sign-in…';
+    await auth.signInWithPopup(provider);
+  }catch(e){ setLoginError(friendlyAuthError(e)); }
+  finally{ document.getElementById('login-status').textContent = ''; }
+});
+
+auth.onAuthStateChanged(async (user)=>{
+  if(user){
+    currentUser = user;
+    showApp();
+    await loadState();
+    document.body.classList.toggle('light', !state.darkMode);
+    renderAll();
+  } else {
+    currentUser = null;
+    state = null;
+    showLoginScreen();
+  }
+});
+
+/* ==================== CONSTANTS ==================== */
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const START_HOUR = 6, END_HOUR = 24; // 6am - midnight (grid bounds)
+const ROW_H = 40;
+const PALETTE = ['#4FD1C5','#E8747C','#5B9BD5','#9D7CD8','#6FCF97','#F2A341','#F2A6C9','#8A9BAE'];
+let uidN = 1;
+function uid(p){ return p + '-' + (uidN++) + '-' + Date.now().toString(36); }
+
+function timeStrToDecimal(t) {
+  if (!t) return null;
+  const [h, m] = t.split(':');
+  return parseInt(h) + (parseInt(m) || 0) / 60;
+}
+
+function decimalToTimeStr(dec) {
+  const h = Math.floor(dec);
+  const m = Math.round((dec - h) * 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+function checkConflict(day, start, end, excludeId = null, weekOffset) {
+  if(weekOffset===undefined) weekOffset = state.weekOffset;
+  for (const b of blocksForWeek(weekOffset).filter(x => x.day === day && x.id !== excludeId)) {
+    if (Math.max(start, b.start) < Math.min(end, b.end)) return { type: 'block', id: b.id };
+  }
+  for (const k of state.busy) {
+    if (!k.startsWith(day + '-')) continue;
+    const bh = parseInt(k.split('-')[1]);
+    if (Math.max(start, bh) < Math.min(end, bh + 1)) return { type: 'busy' };
+  }
+  return null;
+}
+
+/* ==================== STATE ==================== */
+let state = null;
+
+function defaultState(){
+  return {
+    darkMode: true,
+    weekOffset: 0, // 0 = the real current week; +1 = next week; -1 = last week, etc.
+    sameAwakeEveryDay: true,
+    awakeWindows: (function(){
+      const w = {};
+      for(let d=0; d<7; d++) w[d] = { start: 8, end: 22 };
+      return w;
+    })(),
+    categories: [
+      { id:'studying', name:'Studying', color:PALETTE[0], target:15, priority:3 },
+      { id:'gym', name:'Gym', color:PALETTE[1], target:5, priority:2 },
+      { id:'work', name:'Work', color:PALETTE[2], target:20, priority:3 },
+      { id:'spanish', name:'Spanish', color:PALETTE[3], target:4, priority:1 },
+      { id:'reading', name:'Reading', color:PALETTE[4], target:3, priority:1 },
+      { id:'projects', name:'Projects', color:PALETTE[5], target:10, priority:2 },
+      { id:'family', name:'Family', color:PALETTE[6], target:6, priority:2 },
+      { id:'freetime', name:'Free Time', color:PALETTE[7], target:10, priority:1 }
+    ],
+    blocks: [],
+    busy: [], // "day-hour" strings
+    energy: (function(){
+      const e = {};
+      for(let d=0; d<7; d++){
+        e[d] = d<5
+          ? { morning:'med', afternoon:'high', evening:'med' }
+          : { morning:'low', afternoon:'high', evening:'med' };
+      }
+      return e;
+    })()
+  };
+}
+
+/* ==================== PERSISTENCE ==================== */
+async function loadState(){
+  try{
+    const doc = await db.collection('weekly-planner-state').doc(currentUser.uid).get();
+    if(doc.exists && doc.data() && doc.data().json){
+      state = JSON.parse(doc.data().json);
+      if(!state.awakeWindows){
+        const legacy = state.autoWindow || { start:8, end:22 };
+        state.awakeWindows = {};
+        for(let d=0; d<7; d++) state.awakeWindows[d] = { start: legacy.start, end: legacy.end };
+      }
+      for(let d=0; d<7; d++){
+        if(!state.awakeWindows[d]) state.awakeWindows[d] = { start:8, end:22 };
+      }
+      if(typeof state.sameAwakeEveryDay !== 'boolean') state.sameAwakeEveryDay = true;
+      if(typeof state.weekOffset !== 'number') state.weekOffset = 0;
+      (state.blocks||[]).forEach(b=>{
+        if(typeof b.locked==='undefined') b.locked=false;
+        if(!b.repeat) b.repeat='weekly'; // blocks saved before repeat existed were all recurring
+        if(b.repeat==='once' && typeof b.weekOffset!=='number') b.weekOffset = state.weekOffset;
+      });
+      return;
+    }
+  }catch(e){ /* no saved state yet */ }
+  state = defaultState();
+  autoScheduleWeek(false);
+}
+async function saveState(){
+  if(!currentUser) return;
+  try{
+    await db.collection('weekly-planner-state').doc(currentUser.uid).set({
+      json: JSON.stringify(state),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+  catch(e){ console.error('save failed', e); toast('Couldn\u2019t save \u2014 check your connection.', true); }
+}
+
+/* ==================== HELPERS ==================== */
+function getCat(id){ return state.categories.find(c=>c.id===id); }
+function busyKey(d,h){ return d+'-'+h; }
+function isBusy(d,h){ return state.busy.includes(busyKey(d,h)); }
+function blockAt(d,h){ return visibleBlocks().find(b=>b.day===d && h>=b.start && h<b.end); }
+function energySeg(h){ return h<12?'morning':(h<18?'afternoon':'evening'); }
+function energyRank(d,h){ const lvl = state.energy[d][energySeg(h)]; return lvl==='high'?3:(lvl==='med'?2:1); }
+function sumDoneHours(catId){
+  return state.blocks.filter(b=>b.catId===catId && b.done).reduce((s,b)=>s+(b.end-b.start),0);
+}
+function sumScheduledHours(catId){
+  return state.blocks.filter(b=>b.catId===catId).reduce((s,b)=>s+(b.end-b.start),0);
+}
+function todayIdx(){ return (new Date().getDay()+6)%7; } // Mon=0..Sun=6
+function awakeWindowFor(d){ return state.awakeWindows[d] || { start:8, end:22 }; }
+function inAutoWindow(d,h){ const win = awakeWindowFor(d); return h>=win.start && (h+1)<=win.end; }
+
+/* ---- Real calendar dates, so the planner can move into future/past weeks ---- */
+function realCurrentWeekMonday(){
+  const now = new Date();
+  const dow = (now.getDay()+6)%7; // Mon=0..Sun=6
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()-dow);
+}
+function weekMondayFor(offset){
+  const m = realCurrentWeekMonday();
+  m.setDate(m.getDate() + offset*7);
+  return m;
+}
+function dateForDay(offset, dayIdx){
+  const d = weekMondayFor(offset);
+  d.setDate(d.getDate()+dayIdx);
+  return d;
+}
+function fmtDateShort(d){ return d.toLocaleDateString(undefined,{month:'short', day:'numeric'}); }
+function fmtWeekLabel(offset){
+  const start = weekMondayFor(offset);
+  const end = new Date(start); end.setDate(end.getDate()+6);
+  const sameYear = start.getFullYear()===new Date().getFullYear();
+  const yr = sameYear ? '' : ', '+start.getFullYear();
+  return `${fmtDateShort(start)} \u2013 ${fmtDateShort(end)}${yr}`;
+}
+function isViewingRealToday(){ return state.weekOffset===0; }
+// Convert a "YYYY-MM-DD" value from a <input type="date"> into our internal
+// {weekOffset, day} representation, relative to the real current week.
+function weekOffsetAndDayForDate(dateStr){
+  const [y,m,dd] = dateStr.split('-').map(Number);
+  const picked = new Date(y, m-1, dd);
+  const monday = realCurrentWeekMonday();
+  const diffDays = Math.round((picked - monday) / 86400000);
+  const weekOffset = Math.floor(diffDays/7);
+  const day = ((diffDays % 7)+7)%7;
+  return { weekOffset, day, date: picked };
+}
+function todayDateStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+// A block is visible on a given week if it repeats weekly, or if it's a one-off
+// tied to exactly that week.
+function blockVisibleForWeek(b, weekOffset){ return b.repeat!=='once' || b.weekOffset===weekOffset; }
+function blockVisible(b){ return blockVisibleForWeek(b, state.weekOffset); }
+function blocksForWeek(weekOffset){ return state.blocks.filter(b=>blockVisibleForWeek(b, weekOffset)); }
+function visibleBlocks(){ return blocksForWeek(state.weekOffset); }
+function goToWeek(offset){
+  state.weekOffset = offset;
+  saveState(); renderAll();
+}
+
+/* ==================== SCHEDULER ==================== */
+function scheduleCategoryHours(cat, hoursNeeded, capPerDay){
+  capPerDay = capPerDay || 3;
+  let placed = 0;
+  let slots = [];
+  for(let d=0; d<7; d++){
+    const win = awakeWindowFor(d);
+    const winStart = Math.max(START_HOUR, win.start);
+    const winEnd = Math.min(END_HOUR, win.end);
+    for(let h=Math.ceil(winStart); h+1<=winEnd; h++){
+      if(!isBusy(d,h) && !blockAt(d,h)) slots.push({d,h,energy:energyRank(d,h)});
+    }
+  }
+  slots.sort((a,b)=> b.energy - a.energy);
+  const perDay = {0:0,1:0,2:0,3:0,4:0,5:0,6:0};
+  // count existing hours today already for this cat to respect cap loosely
+  for(let d=0; d<7; d++){ perDay[d] = state.blocks.filter(b=>b.catId===cat.id && b.day===d).reduce((s,b)=>s+(b.end-b.start),0); }
+
+  for(const slot of slots){
+    if(placed>=hoursNeeded) break;
+    if(perDay[slot.d] >= capPerDay) continue;
+    if(blockAt(slot.d, slot.h)) continue;
+    state.blocks.push({ id:uid('blk'), catId:cat.id, day:slot.d, start:slot.h, end:slot.h+1, done:false, locked:false, repeat:'weekly' });
+    perDay[slot.d]++; placed++;
+  }
+  if(placed < hoursNeeded){
+    for(const slot of slots){
+      if(placed>=hoursNeeded) break;
+      if(blockAt(slot.d, slot.h)) continue;
+      state.blocks.push({ id:uid('blk'), catId:cat.id, day:slot.d, start:slot.h, end:slot.h+1, done:false, locked:false, repeat:'weekly' });
+      placed++;
+    }
+  }
+  return placed;
+}
+
+function mergeBlocks(){
+  const merged = [];
+  for(let d=0; d<7; d++){
+    const byKey = {};
+    state.blocks.filter(b=>b.day===d).forEach(b=>{
+      const scope = b.repeat==='once' ? ('once'+b.weekOffset) : 'weekly';
+      const key = b.catId + '|' + (b.locked?1:0) + '|' + scope;
+      (byKey[key] = byKey[key] || []).push(b);
+    });
+    Object.keys(byKey).forEach(key=>{
+      const list = byKey[key].sort((a,b)=>a.start-b.start);
+      let cur = null;
+      list.forEach(b=>{
+        if(cur && b.start===cur.end){
+          cur.end = b.end;
+          cur.done = cur.done && b.done;
+        } else {
+          if(cur) merged.push(cur);
+          cur = { id:b.id, catId:b.catId, day:d, start:b.start, end:b.end, done:b.done, locked:b.locked, repeat:b.repeat, weekOffset:b.weekOffset };
+        }
+      });
+      if(cur) merged.push(cur);
+    });
+  }
+  state.blocks = merged;
+}
+
+function autoScheduleWeek(keepBusy){
+  const lockedBlocks = state.blocks.filter(b=>b.locked);
+  state.blocks = lockedBlocks.slice();
+  if(!keepBusy) state.busy = [];
+  const sorted = [...state.categories].sort((a,b)=> b.priority - a.priority || b.target - a.target);
+  sorted.forEach(cat=>{
+    const lockedHours = lockedBlocks.filter(b=>b.catId===cat.id).reduce((s,b)=>s+(b.end-b.start),0);
+    const need = Math.max(0, cat.target - lockedHours);
+    if(need>0) scheduleCategoryHours(cat, need);
+  });
+  mergeBlocks();
+}
+
+/* ==================== ACTIONS: something came up / conflicts ==================== */
+function blockSomethingCameUp(blockId){
+  const idx = state.blocks.findIndex(b=>b.id===blockId);
+  if(idx<0) return;
+  const blk = state.blocks[idx];
+  const hours = blk.end - blk.start;
+  const cat = getCat(blk.catId);
+  for(let h=blk.start; h<blk.end; h++) state.busy.push(busyKey(blk.day,h));
+  state.blocks.splice(idx,1);
+  const placed = scheduleCategoryHours(cat, hours);
+  mergeBlocks();
+  if(placed>=hours) toast(`${cat.name}: rescheduled ${hours}h to a new open slot.`);
+  else if(placed>0) toast(`${cat.name}: only found room for ${placed} of ${hours}h this week.`, true);
+  else toast(`${cat.name}: no open slots left to reschedule ${hours}h this week.`, true);
+  saveState(); renderAll();
+}
+function toggleDone(blockId){
+  const blk = state.blocks.find(b=>b.id===blockId);
+  if(!blk) return;
+  blk.done = !blk.done;
+  saveState(); renderAll();
+}
+function toggleLock(blockId){
+  const blk = state.blocks.find(b=>b.id===blockId);
+  if(!blk) return;
+  blk.locked = !blk.locked;
+  mergeBlocks();
+  saveState(); renderAll();
+  toast(blk.locked ? 'Pinned \u2014 Auto-Schedule and bulk commands will leave this in place.' : 'Unpinned.');
+}
+function deleteBlock(blockId){
+  state.blocks = state.blocks.filter(b=>b.id!==blockId);
+  saveState(); renderAll();
+}
+function toggleBusyCell(day,hour){
+  const key = busyKey(day,hour);
+  if(state.busy.includes(key)){
+    state.busy = state.busy.filter(k=>k!==key);
+  } else {
+    if(blockAt(day,hour)) return; // use block controls instead
+    state.busy.push(key);
+  }
+  saveState(); renderAll();
+}
+
+/* ==================== NOTIFICATIONS ==================== */
+let toastLog = [];
+function toast(msg, warn){
+  toastLog.unshift({msg, warn:!!warn, t:Date.now()});
+  toastLog = toastLog.slice(0,6);
+  const area = document.getElementById('toast-area');
+  const el = document.createElement('div');
+  el.className = 'toast' + (warn?' warn':'');
+  el.textContent = msg;
+  area.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, 4500);
+  renderAlerts();
+}
+function computeBehindAlerts(){
+  const frac = (todayIdx()+1)/7;
+  const alerts = [];
+  state.categories.forEach(c=>{
+    const completed = sumDoneHours(c.id);
+    const expected = c.target * frac;
+    const diff = expected - completed;
+    if(diff >= 1) alerts.push({ text:`You're behind on ${c.name} by ${diff.toFixed(1)}h.`, warn:true });
+  });
+  return alerts;
+}
+function renderAlerts(){
+  const list = document.getElementById('notifications-list');
+  list.innerHTML = '';
+  const behind = computeBehindAlerts();
+  const recent = toastLog.slice(0,4).map(t=>({text:t.msg, warn:t.warn}));
+  const all = behind.concat(recent);
+  if(all.length===0){
+    list.innerHTML = '<div class="notif ok">All caught up. No alerts right now.</div>';
+    return;
+  }
+  all.forEach(a=>{
+    const d = document.createElement('div');
+    d.className = 'notif' + (a.warn? '' : ' ok');
+    d.textContent = a.text;
+    list.appendChild(d);
+  });
+}
+
+/* ==================== RENDER: categories ==================== */
+function renderCategories(){
+  const list = document.getElementById('category-list');
+  list.innerHTML = '';
+  state.categories.forEach(cat=>{
+    const chip = document.createElement('div');
+    chip.className = 'cat-chip';
+    chip.draggable = false;
+    chip.innerHTML = `
+      <span class="cat-dot" style="background:${cat.color}"></span>
+      <input type="text" class="cat-name-input mono-off" value="${cat.name.replace(/"/g,'&quot;')}" title="click to rename"/>
+      <input type="number" min="0" max="80" class="cat-target mono" value="${cat.target}" title="weekly target hours"/>
+      <span class="cat-pri" data-p="${cat.priority}" title="priority — tap to cycle">${cat.priority===3?'HIGH':cat.priority===2?'MED':'LOW'}</span>
+      <button class="cat-edit" title="edit color">🎨</button>
+      <button class="cat-del" title="remove category">✕</button>
+    `;
+    const nameInput = chip.querySelector('.cat-name-input');
+    nameInput.addEventListener('change', ()=>{
+      const v = nameInput.value.trim();
+      if(v) cat.name = v; else nameInput.value = cat.name;
+      saveState(); renderAll();
+    });
+    nameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') nameInput.blur(); });
+    chip.querySelector('.cat-edit').addEventListener('click', ()=>{
+      const idx = PALETTE.indexOf(cat.color);
+      cat.color = PALETTE[(idx+1)%PALETTE.length];
+      saveState(); renderAll();
+    });
+    const targetInput = chip.querySelector('.cat-target');
+    targetInput.addEventListener('change', ()=>{
+      cat.target = Math.max(0, parseInt(targetInput.value)||0);
+      saveState(); renderDashboard();
+    });
+    const priBadge = chip.querySelector('.cat-pri');
+    priBadge.addEventListener('click', ()=>{
+      cat.priority = cat.priority>=3 ? 1 : cat.priority+1;
+      saveState(); renderCategories();
+    });
+    chip.querySelector('.cat-del').addEventListener('click', ()=>{
+      state.categories = state.categories.filter(c=>c.id!==cat.id);
+      state.blocks = state.blocks.filter(b=>b.catId!==cat.id);
+      saveState(); renderAll();
+    });
+    // pointer-drag to create new block on grid
+    chip.addEventListener('pointerdown', (e)=> startChipDrag(e, cat));
+    list.appendChild(chip);
+  });
+}
+document.getElementById('add-category-btn').addEventListener('click', ()=>{
+  const existing = document.querySelector('.add-cat-form');
+  if(existing){ existing.remove(); return; }
+  const form = document.createElement('div');
+  form.className = 'add-cat-form';
+  form.innerHTML = `
+    <input type="text" id="new-cat-name" placeholder="Category name" />
+    <div class="row">
+      <input type="number" id="new-cat-target" placeholder="Target hrs/wk" min="0" max="80" value="5"/>
+      <select id="new-cat-pri">
+        <option value="3">High priority</option>
+        <option value="2" selected>Med priority</option>
+        <option value="1">Low priority</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="confirm-add-cat">Add</button>
+      <button class="btn" id="cancel-add-cat">Cancel</button>
+    </div>
+  `;
+  document.getElementById('category-list').after(form);
+  document.getElementById('cancel-add-cat').addEventListener('click', ()=>form.remove());
+  document.getElementById('confirm-add-cat').addEventListener('click', ()=>{
+    const name = document.getElementById('new-cat-name').value.trim();
+    if(!name){ return; }
+    const target = Math.max(0, parseInt(document.getElementById('new-cat-target').value)||0);
+    const priority = parseInt(document.getElementById('new-cat-pri').value);
+    const color = PALETTE[state.categories.length % PALETTE.length];
+    state.categories.push({ id:uid('cat'), name, color, target, priority });
+    saveState(); form.remove(); renderAll();
+  });
+});
+
+/* ==================== ADD BLOCK MANUALLY ==================== */
+document.getElementById('add-block-btn').addEventListener('click', ()=>{
+  const existing = document.querySelector('.add-block-form');
+  if(existing){ existing.remove(); return; }
+  if(state.categories.length===0){ toast('Add a category first.', true); return; }
+  const form = document.createElement('div');
+  form.className = 'add-cat-form add-block-form';
+  const catOptions = state.categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const dayChecks = DAYS.map((d,i)=>`
+    <label style="flex-direction:column; align-items:center; gap:1px; font-size:9px;">
+      <input type="checkbox" class="mb-day-chk" value="${i}" ${i===todayIdx() && isViewingRealToday()?'checked':''}/>${d}
+      <span class="mono mb-day-date-${i}" style="font-size:8px; color:var(--muted);">${fmtDateShort(dateForDay(state.weekOffset,i))}</span>
+    </label>`).join('');
+  form.innerHTML = `
+    <select id="mb-cat">${catOptions}</select>
+    <div id="mb-days-wrap" class="row" style="justify-content:space-between;">${dayChecks}</div>
+    <div id="mb-dates-wrap" style="display:none;">
+      <div id="mb-dates-list"></div>
+      <button class="btn" type="button" id="mb-add-date" style="width:100%; margin-top:4px;">+ Add another date</button>
+    </div>
+    <div class="row">
+      <input type="time" id="mb-start" value="09:00" required />
+      <input type="time" id="mb-end" value="10:00" required />
+    </div>
+    <select id="mb-repeat">
+      <option value="weekly" selected>Repeats every week</option>
+      <option value="once">Specific date(s)</option>
+    </select>
+    <label><input type="checkbox" id="mb-lock"/> Pin (Auto-Schedule won't move it)</label>
+    <label><input type="checkbox" id="mb-force"/> Force (override anything already in that slot)</label>
+    <div class="row">
+      <button class="btn primary" id="mb-confirm">Add</button>
+      <button class="btn" id="mb-cancel">Cancel</button>
+    </div>
+  `;
+  document.getElementById('add-block-btn').after(form);
+  const repeatSel = document.getElementById('mb-repeat');
+  const daysWrap = document.getElementById('mb-days-wrap');
+  const datesWrap = document.getElementById('mb-dates-wrap');
+  const datesList = document.getElementById('mb-dates-list');
+  function addDateRow(defaultDateStr){
+    const row = document.createElement('div');
+    row.className = 'row mb-date-row';
+    row.style.marginTop = '4px';
+    row.innerHTML = `<input type="date" class="mb-date-input" value="${defaultDateStr||todayDateStr()}" min="${todayDateStr()}" />
+      <button class="btn" type="button" style="flex:0 0 auto;">\u2715</button>`;
+    row.querySelector('button').addEventListener('click', ()=>{
+      if(datesList.children.length>1) row.remove();
+    });
+    datesList.appendChild(row);
+  }
+  addDateRow(todayDateStr());
+  document.getElementById('mb-add-date').addEventListener('click', ()=>addDateRow());
+  repeatSel.addEventListener('change', ()=>{
+    const once = repeatSel.value==='once';
+    daysWrap.style.display = once ? 'none' : '';
+    datesWrap.style.display = once ? '' : 'none';
+  });
+  document.getElementById('mb-cancel').addEventListener('click', ()=>form.remove());
+  document.getElementById('mb-confirm').addEventListener('click', ()=>{
+    const catId = document.getElementById('mb-cat').value;
+    const start = timeStrToDecimal(document.getElementById('mb-start').value);
+    const end = timeStrToDecimal(document.getElementById('mb-end').value);
+    const repeat = repeatSel.value;
+    const locked = document.getElementById('mb-lock').checked;
+    const force = document.getElementById('mb-force').checked;
+    const cat = getCat(catId);
+    if(!cat || end<=start){ toast('Check the time range.', true); return; }
+
+    let targets = [];
+    if(repeat==='weekly'){
+      const days = [...form.querySelectorAll('.mb-day-chk:checked')].map(c=>parseInt(c.value));
+      if(days.length===0){ toast('Pick at least one day.', true); return; }
+      targets = days.map(day=>({ day, weekOffset: state.weekOffset, label: DAYS[day] }));
+    } else {
+      const dateStrs = [...form.querySelectorAll('.mb-date-input')].map(i=>i.value).filter(Boolean);
+      if(dateStrs.length===0){ toast('Pick at least one date.', true); return; }
+      targets = dateStrs.map(dateStr=>{
+        const { weekOffset, day, date } = weekOffsetAndDayForDate(dateStr);
+        return { day, weekOffset, label: fmtDateShort(date) };
+      });
+    }
+
+    let placed = [], blocked = [];
+    targets.forEach(t=>{
+      const conflict = checkConflict(t.day, start, end, null, t.weekOffset);
+      if(conflict && !force){ blocked.push(t.label); return; }
+      if(conflict && force){
+        // clear whatever occupies that slot on that day, in that target week only
+        for(let h=Math.floor(start); h<Math.ceil(end); h++){ state.busy = state.busy.filter(k=>k!==busyKey(t.day,h)); }
+        state.blocks = state.blocks.filter(b=>{
+          if(b.day!==t.day || !blockVisibleForWeek(b, t.weekOffset)) return true;
+          return !(b.start<end && b.end>start);
+        });
+      }
+      state.blocks.push({ id:uid('blk'), catId, day:t.day, start, end, done:false, locked, repeat, weekOffset: repeat==='once'?t.weekOffset:undefined });
+      placed.push(t.label);
+    });
+    mergeBlocks(); saveState(); form.remove(); renderAll();
+    const note = repeat==='once' ? '' : ' (repeating)';
+    if(placed.length) toast(`Added ${cat.name} on ${placed.join(', ')} ${fmtHour(start)}\u2013${fmtHour(end)}${locked?' (pinned)':''}${note}.`);
+    if(blocked.length) toast(`Skipped ${blocked.join(', ')} \u2014 already taken. Check "Force" to override.`, true);
+  });
+});
+
+/* ==================== RENDER: energy grid ==================== */
+function renderEnergy(){
+  const wrap = document.getElementById('energy-grid');
+  wrap.innerHTML = '';
+  for(let d=0; d<7; d++){
+    const row = document.createElement('div');
+    row.className = 'energy-row';
+    row.innerHTML = `<span class="day-label">${DAYS[d]}</span>`;
+    ['morning','afternoon','evening'].forEach(seg=>{
+      const lvl = state.energy[d][seg];
+      const el = document.createElement('div');
+      el.className = 'energy-seg';
+      el.dataset.lvl = lvl;
+      el.textContent = seg[0].toUpperCase();
+      el.title = seg + ': ' + lvl;
+      el.addEventListener('click', ()=>{
+        const order = ['low','med','high'];
+        const next = order[(order.indexOf(state.energy[d][seg])+1)%3];
+        state.energy[d][seg] = next;
+        saveState(); renderEnergy();
+      });
+      row.appendChild(el);
+    });
+    wrap.appendChild(row);
+  }
+}
+
+/* ==================== RENDER: awake / auto-schedule window ==================== */
+function clampAwakeVal(val, isEnd){
+  if(val===null || isNaN(val)) return isEnd ? 22 : 8;
+  if(isEnd && val>=23.9) return 24;
+  if(!isEnd && val<=0.05) return 0;
+  return val;
+}
+function renderAutoWindow(){
+  const sameToggle = document.getElementById('aw-same-toggle');
+  sameToggle.checked = state.sameAwakeEveryDay;
+  const grid = document.getElementById('awake-window-grid');
+  grid.innerHTML = '';
+  const daysToShow = state.sameAwakeEveryDay ? [0] : [0,1,2,3,4,5,6];
+  daysToShow.forEach(d=>{
+    const win = awakeWindowFor(d);
+    const row = document.createElement('div');
+    row.className = 'aw-row';
+    const label = state.sameAwakeEveryDay ? 'Every day' : DAYS[d];
+    const startVal = decimalToTimeStr(win.start);
+    const endVal = win.end>=24 ? '23:59' : decimalToTimeStr(win.end);
+    row.innerHTML = `
+      <span class="aw-label mono">${label}</span>
+      <input type="time" class="aw-start-input mono" data-day="${d}" value="${startVal}"/>
+      <span class="aw-sep">to</span>
+      <input type="time" class="aw-end-input mono" data-day="${d}" value="${endVal}"/>
+    `;
+    grid.appendChild(row);
+  });
+  grid.querySelectorAll('.aw-start-input, .aw-end-input').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const isStart = inp.classList.contains('aw-start-input');
+      let val = timeStrToDecimal(inp.value);
+      if(val===null) return;
+      val = clampAwakeVal(val, !isStart);
+      if(state.sameAwakeEveryDay){
+        for(let d=0; d<7; d++){
+          if(isStart) state.awakeWindows[d].start = val;
+          else state.awakeWindows[d].end = val;
+        }
+      } else {
+        const d = parseInt(inp.dataset.day);
+        if(isStart) state.awakeWindows[d].start = val;
+        else state.awakeWindows[d].end = val;
+      }
+      for(let d=0; d<7; d++){
+        const w = state.awakeWindows[d];
+        if(w.end <= w.start) w.end = Math.min(END_HOUR, w.start+1);
+      }
+      saveState(); renderAll();
+    });
+  });
+  sameToggle.onchange = ()=>{
+    state.sameAwakeEveryDay = sameToggle.checked;
+    if(state.sameAwakeEveryDay){
+      const base = state.awakeWindows[0];
+      for(let d=1; d<7; d++) state.awakeWindows[d] = { start:base.start, end:base.end };
+    }
+    saveState(); renderAll();
+  };
+}
+
+/* ==================== RENDER: grid ==================== */
+function renderHourLabels(){
+  const wrap = document.getElementById('hour-labels');
+  wrap.innerHTML = '';
+  for(let h=START_HOUR; h<END_HOUR; h++){
+    const el = document.createElement('div');
+    el.className = 'hour-label mono';
+    const label = h===0?'12a':(h<12?h+'a':(h===12?'12p':(h-12)+'p'));
+    el.textContent = label;
+    wrap.appendChild(el);
+  }
+}
+
+function renderGrid(){
+  const cols = document.getElementById('days-cols');
+  cols.innerHTML = '';
+  const tIdx = todayIdx();
+  const isTodayWeek = isViewingRealToday();
+  for(let d=0; d<7; d++){
+    const colWrap = document.createElement('div');
+    colWrap.className = 'day-col-wrap';
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    const dateStr = fmtDateShort(dateForDay(state.weekOffset, d));
+    const isToday = isTodayWeek && d===tIdx;
+    header.innerHTML = `<span>${DAYS[d]}</span>` + `<span class="d-sub">${isToday ? 'today' : dateStr}</span>`;
+    colWrap.appendChild(header);
+
+    const col = document.createElement('div');
+    col.className = 'day-col';
+    col.dataset.day = d;
+    col.style.height = ((END_HOUR-START_HOUR)*ROW_H) + 'px';
+
+    // outside-awake-window shading (hours Auto-Schedule / NL commands won't use, per day)
+    for(let h=START_HOUR; h<END_HOUR; h++){
+      if(!inAutoWindow(d,h)){
+        const oz = document.createElement('div');
+        oz.className = 'cell-outside-window';
+        oz.style.top = ((h-START_HOUR)*ROW_H)+'px';
+        oz.title = 'Outside your available/awake hours';
+        col.appendChild(oz);
+      }
+    }
+    // busy stripes
+    for(let h=START_HOUR; h<END_HOUR; h++){
+      if(isBusy(d,h)){
+        const bz = document.createElement('div');
+        bz.className = 'cell-busy';
+        bz.style.top = ((h-START_HOUR)*ROW_H)+'px';
+        bz.addEventListener('click', ()=>toggleBusyCell(d,h));
+        col.appendChild(bz);
+      }
+    }
+    // click-to-toggle-busy on empty cells (invisible hit areas)
+    for(let h=START_HOUR; h<END_HOUR; h++){
+      if(!isBusy(d,h) && !blockAt(d,h)){
+        const hit = document.createElement('div');
+        hit.style.position='absolute'; hit.style.left='0'; hit.style.right='0';
+        hit.style.top = ((h-START_HOUR)*ROW_H)+'px'; hit.style.height = ROW_H+'px';
+        hit.addEventListener('click', ()=>toggleBusyCell(d,h));
+        col.appendChild(hit);
+      }
+    }
+
+    // blocks
+    state.blocks.filter(b=>b.day===d && blockVisible(b)).forEach(b=>{
+      const cat = getCat(b.catId);
+      if(!cat) return;
+      const el = document.createElement('div');
+      el.className = 'block' + (b.done?' done':'') + (b.locked?' locked':'');
+      el.style.top = ((b.start-START_HOUR)*ROW_H+1)+'px';
+      el.style.height = ((b.end-b.start)*ROW_H-2)+'px';
+      el.style.background = hexA(cat.color,0.22);
+      el.style.borderLeftColor = cat.color;
+      el.style.color = 'var(--ink)';
+      el.dataset.blockId = b.id;
+      const timeLbl = fmtHour(b.start) + '–' + fmtHour(b.end);
+      const onceTag = b.repeat==='once' ? ' <span class="mono" style="opacity:.6;font-size:8px;">(this week)</span>' : '';
+      el.innerHTML = `
+        <div class="block-actions">
+          <button class="b-act" data-act="edit" title="edit this block">✎</button>
+          <button class="b-act${b.locked?' pinned':''}" data-act="lock" title="${b.locked?'unpin':'pin — force this time'}">📌</button>
+          <button class="b-act" data-act="done" title="toggle done">✓</button>
+          <button class="b-act" data-act="bump" title="something came up">⚡</button>
+          <button class="b-act" data-act="del" title="delete">✕</button>
+        </div>
+        <span class="b-title">${b.locked?'📌 ':''}${cat.name}${onceTag}</span>
+        <span class="b-time mono">${timeLbl}</span>
+      `;
+      el.querySelector('[data-act="edit"]').addEventListener('click',(e)=>{ e.stopPropagation(); openBlockEditor(b.id); });
+      el.querySelector('[data-act="lock"]').addEventListener('click',(e)=>{ e.stopPropagation(); toggleLock(b.id); });
+      el.querySelector('[data-act="done"]').addEventListener('click',(e)=>{ e.stopPropagation(); toggleDone(b.id); });
+      el.querySelector('[data-act="bump"]').addEventListener('click',(e)=>{ e.stopPropagation(); blockSomethingCameUp(b.id); });
+      el.querySelector('[data-act="del"]').addEventListener('click',(e)=>{ e.stopPropagation(); deleteBlock(b.id); });
+      el.addEventListener('dblclick',(e)=>{ e.stopPropagation(); openBlockEditor(b.id); });
+      el.addEventListener('pointerdown',(e)=>{
+        if(e.target.closest('.b-act')) return;
+        startBlockDrag(e, b.id);
+      });
+      col.appendChild(el);
+    });
+
+    colWrap.appendChild(col);
+    cols.appendChild(colWrap);
+  }
+}
+
+function fmtHour(hVal){
+  const h = Math.floor(hVal);
+  const m = Math.round((hVal - h) * 60);
+  const mm = m.toString().padStart(2, '0');
+  let hr = ((h % 24) + 24) % 24;
+  const ampm = hr < 12 ? 'a' : 'p';
+  if (hr === 0) hr = 12;
+  else if (hr > 12) hr -= 12;
+  return m === 0 ? `${hr}${ampm}` : `${hr}:${mm}${ampm}`;
+}
+
+function parseHourString(t){
+  if(t===undefined || t===null) return null;
+  t = String(t).trim().toLowerCase();
+  let m = t.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/);
+  if(m){
+     let h = parseInt(m[1]);
+     let min = parseInt(m[2])/60;
+     if(m[3]==='pm' && h<12) h+=12;
+     if(m[3]==='am' && h===12) h=0;
+     return h + min;
+  }
+  m = t.match(/^(\d{1,2})\s*(am|pm)$/);
+  if(m){ let h = parseInt(m[1]); if(m[2]==='pm' && h<12) h+=12; if(m[2]==='am' && h===12) h=0; return h; }
+  m = t.match(/^(\d{1,2})$/);
+  if(m) return parseInt(m[1]);
+  return null;
+}
+
+function hexA(hex, a){
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+/* ==================== RENDER: dashboard ==================== */
+function renderDashboard(){
+  const totalTarget = state.categories.reduce((s,c)=>s+c.target,0) || 1;
+  const totalDone = state.categories.reduce((s,c)=>s+sumDoneHours(c.id),0);
+  let weighted = 0, weightSum = 0;
+  state.categories.forEach(c=>{
+    const ratio = Math.min(1, sumDoneHours(c.id)/(c.target||1));
+    weighted += ratio * c.priority; weightSum += c.priority;
+  });
+  const score = weightSum ? Math.round(weighted/weightSum*100) : 0;
+  document.getElementById('score-num').textContent = score;
+  const circumference = 2*Math.PI*27;
+  const ring = document.getElementById('score-ring');
+  ring.setAttribute('stroke-dasharray', circumference.toFixed(1));
+  ring.setAttribute('stroke-dashoffset', (circumference*(1-score/100)).toFixed(1));
+
+  const barsWrap = document.getElementById('category-bars');
+  barsWrap.innerHTML = '';
+  state.categories.forEach(c=>{
+    const done = sumDoneHours(c.id);
+    const pct = Math.min(100, Math.round((done/(c.target||1))*100));
+    const row = document.createElement('div');
+    row.className = 'cat-bar-row';
+    row.innerHTML = `
+      <div class="cat-bar-top"><span class="nm">${c.name}</span><span class="hrs mono">${done}/${c.target}h</span></div>
+      <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%; background:${c.color}"></div></div>
+    `;
+    barsWrap.appendChild(row);
+  });
+
+  const activeWrap = document.getElementById('active-days');
+  activeWrap.innerHTML = '';
+  state.categories.forEach(c=>{
+    const daysWithDone = new Set(state.blocks.filter(b=>b.catId===c.id && b.done).map(b=>b.day)).size;
+    const row = document.createElement('div');
+    row.className = 'active-row';
+    row.innerHTML = `<span>${c.name}</span><span class="n mono">${daysWithDone}/7</span>`;
+    activeWrap.appendChild(row);
+  });
+
+  renderAlerts();
+}
+
+/* ==================== DRAG: category chip -> new block ==================== */
+let dragGhost = null;
+let dragMode = null; // {type:'new', catId} or {type:'move', blockId}
+
+function startChipDrag(e, cat){
+  e.preventDefault();
+  dragMode = { type:'new', catId:cat.id };
+  createGhost(e, cat.name, cat.color);
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd);
+}
+function startBlockDrag(e, blockId){
+  e.preventDefault();
+  const blk = state.blocks.find(b=>b.id===blockId);
+  const cat = getCat(blk.catId);
+  dragMode = { type:'move', blockId };
+  createGhost(e, cat.name, cat.color);
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd);
+}
+function createGhost(e, label, color){
+  dragGhost = document.createElement('div');
+  dragGhost.className = 'drag-clone mono';
+  dragGhost.style.background = hexA(color,0.85);
+  dragGhost.style.color = '#0A1929';
+  dragGhost.style.width = '90px';
+  dragGhost.textContent = label;
+  dragGhost.style.left = (e.clientX+8)+'px';
+  dragGhost.style.top = (e.clientY+8)+'px';
+  document.body.appendChild(dragGhost);
+}
+function onDragMove(e){
+  if(dragGhost){ dragGhost.style.left=(e.clientX+8)+'px'; dragGhost.style.top=(e.clientY+8)+'px'; }
+}
+function onDragEnd(e){
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', onDragEnd);
+  if(dragGhost){ dragGhost.remove(); dragGhost=null; }
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const col = el ? el.closest('.day-col') : null;
+  if(!col || !dragMode){ dragMode=null; return; }
+  const day = parseInt(col.dataset.day);
+  const rect = col.getBoundingClientRect();
+  const offsetY = e.clientY - rect.top;
+  let startH = START_HOUR + Math.round((offsetY / ROW_H) * 4) / 4;
+  startH = Math.max(START_HOUR, Math.min(END_HOUR-1, startH));
+
+  if(dragMode.type==='new'){
+    const cat = getCat(dragMode.catId);
+    if(checkConflict(day, startH, startH + 1)){
+      toast('That slot is already taken — try another.', true);
+    } else {
+      state.blocks.push({ id:uid('blk'), catId:cat.id, day, start:startH, end:startH+1, done:false, locked:false, repeat:'weekly' });
+      mergeBlocks(); saveState(); toast(`Added ${cat.name} at ${fmtHour(startH)} on ${DAYS[day]}.`);
+      renderAll();
+    }
+  } else if(dragMode.type==='move'){
+    moveBlock(dragMode.blockId, day, startH);
+  }
+  dragMode = null;
+}
+
+function moveBlock(blockId, newDay, newStart){
+  const blk = state.blocks.find(b=>b.id===blockId);
+  if(!blk) return;
+  const duration = blk.end - blk.start;
+  const clampedStart = Math.max(START_HOUR, Math.min(END_HOUR-duration, newStart));
+  // check conflicts in target range excluding self
+  let busyConflict = false;
+  const blockConflicts = new Set();
+  for(let h=clampedStart; h<clampedStart+duration; h++){
+    if(isBusy(newDay,h)) busyConflict = true;
+    const other = blockAt(newDay,h);
+    if(other && other.id!==blockId) blockConflicts.add(other.id);
+  }
+  if(busyConflict){ toast('That time is marked unavailable.', true); renderAll(); return; }
+  if(blockConflicts.size===1){
+    const otherId = [...blockConflicts][0];
+    const other = state.blocks.find(b=>b.id===otherId);
+    if((other.end-other.start)===duration){
+      const oDay=other.day, oStart=other.start, oEnd=other.end;
+      other.day = blk.day; other.start = blk.start; other.end = blk.end;
+      blk.day = newDay; blk.start = clampedStart; blk.end = clampedStart+duration;
+      toast(`Swapped ${getCat(blk.catId).name} and ${getCat(other.catId).name}.`);
+    } else {
+      toast('Doesn\u2019t fit there \u2014 try a slot with matching length.', true);
+      renderAll(); return;
+    }
+  } else if(blockConflicts.size>1){
+    toast('Doesn\u2019t fit there \u2014 spans multiple blocks.', true);
+    renderAll(); return;
+  } else {
+    blk.day = newDay; blk.start = clampedStart; blk.end = clampedStart+duration;
+  }
+  mergeBlocks(); saveState(); renderAll();
+}
+
+/* ==================== EDIT BLOCK MODAL ==================== */
+function closeBlockEditor(){
+  const overlay = document.getElementById('block-edit-overlay');
+  overlay.classList.add('hidden');
+  overlay.innerHTML = '';
+}
+function openBlockEditor(blockId){
+  const blk = state.blocks.find(b=>b.id===blockId);
+  if(!blk) return;
+  const overlay = document.getElementById('block-edit-overlay');
+  const catOptions = state.categories.map(c=>`<option value="${c.id}" ${c.id===blk.catId?'selected':''}>${c.name}</option>`).join('');
+  const dayWeekOffset = blk.repeat==='once' ? blk.weekOffset : state.weekOffset;
+  const dayOptions = DAYS.map((d,i)=>`<option value="${i}" ${i===blk.day?'selected':''}>${d} \u2014 ${fmtDateShort(dateForDay(dayWeekOffset,i))}</option>`).join('');
+  overlay.innerHTML = `
+    <div class="block-edit-modal">
+      <h3>Edit block</h3>
+      <select id="eb-cat">${catOptions}</select>
+      <select id="eb-day">${dayOptions}</select>
+      <div class="row">
+        <input type="time" id="eb-start" value="${decimalToTimeStr(blk.start)}" required />
+        <input type="time" id="eb-end" value="${decimalToTimeStr(blk.end)}" required />
+      </div>
+      <select id="eb-repeat">
+        <option value="weekly" ${blk.repeat!=='once'?'selected':''}>Repeats every week</option>
+        <option value="once" ${blk.repeat==='once'?'selected':''}>Just this week (${fmtWeekLabel(blk.repeat==='once'?blk.weekOffset:state.weekOffset)})</option>
+      </select>
+      <label><input type="checkbox" id="eb-lock" ${blk.locked?'checked':''}/> Pin (Auto-Schedule won't move it)</label>
+      <label><input type="checkbox" id="eb-done" ${blk.done?'checked':''}/> Mark as done</label>
+      <label><input type="checkbox" id="eb-force"/> Force (override conflicts at the new time)</label>
+      <div class="actions">
+        <button class="btn primary" id="eb-save">Save</button>
+        <button class="btn" id="eb-cancel">Cancel</button>
+      </div>
+      <div class="actions">
+        <button class="btn danger" id="eb-delete">Delete block</button>
+      </div>
+    </div>
+  `;
+  overlay.classList.remove('hidden');
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeBlockEditor(); });
+  document.getElementById('eb-cancel').addEventListener('click', closeBlockEditor);
+  document.getElementById('eb-delete').addEventListener('click', ()=>{
+    deleteBlock(blk.id);
+    closeBlockEditor();
+  });
+  document.getElementById('eb-save').addEventListener('click', ()=>{
+    const catId = document.getElementById('eb-cat').value;
+    const day = parseInt(document.getElementById('eb-day').value);
+    const start = timeStrToDecimal(document.getElementById('eb-start').value);
+    const end = timeStrToDecimal(document.getElementById('eb-end').value);
+    const repeat = document.getElementById('eb-repeat').value;
+    const locked = document.getElementById('eb-lock').checked;
+    const done = document.getElementById('eb-done').checked;
+    const force = document.getElementById('eb-force').checked;
+    if(end<=start){ toast('End time must be after start time.', true); return; }
+
+    const conflict = checkConflict(day, start, end, blk.id);
+    const busyConflict = conflict && conflict.type === 'busy';
+    let conflictBlockIds = new Set();
+    if (conflict && conflict.type === 'block') conflictBlockIds.add(conflict.id);
+
+    if((busyConflict || conflictBlockIds.size>0) && !force){
+      toast('That time is already taken \u2014 check "Force" to override, or pick another slot.', true);
+      return;
+    }
+    if(force){
+      for(let h=Math.floor(start); h<Math.ceil(end); h++){ state.busy = state.busy.filter(k=>k!==busyKey(day,h)); }
+      state.blocks = state.blocks.filter(b=>{
+        if(b.id===blk.id) return true;
+        if(b.day!==day || !blockVisible(b)) return true;
+        return !(b.start<end && b.end>start);
+      });
+    }
+    const wasOnce = blk.repeat==='once';
+    const prevWeekOffset = blk.weekOffset;
+    blk.catId = catId;
+    blk.day = day;
+    blk.start = start;
+    blk.end = end;
+    blk.repeat = repeat;
+    blk.weekOffset = repeat==='once' ? (wasOnce && typeof prevWeekOffset==='number' ? prevWeekOffset : state.weekOffset) : undefined;
+    blk.locked = locked;
+    blk.done = done;
+    mergeBlocks(); saveState(); renderAll();
+    closeBlockEditor();
+    toast('Block updated.');
+  });
+}
+
+/* ==================== NATURAL LANGUAGE COMMANDS ==================== */
+function buildStateSummary(){
+  const cats = state.categories.map(c=>`${c.name} (id:${c.id}, target:${c.target}h, priority:${c.priority})`).join('; ');
+  const blocksTxt = visibleBlocks().map(b=>`${DAYS[b.day]} ${fmtHour(b.start)}-${fmtHour(b.end)}: ${getCat(b.catId)?getCat(b.catId).name:'?'}${b.done?' (done)':''}${b.locked?' (pinned)':''}${b.repeat==='once'?' (one-time, this viewed week only)':' (repeats every week)'}`).join('; ');
+  const awakeTxt = DAYS.map((dn,i)=>`${dn} ${fmtHour(state.awakeWindows[i].start)}-${fmtHour(state.awakeWindows[i].end)}`).join(', ');
+  return `Categories: ${cats}\nReal today is ${DAYS[todayIdx()]}.\nCurrently VIEWING the week of ${fmtWeekLabel(state.weekOffset)} (weekOffset ${state.weekOffset}; 0=the real current week, +1=next week, -1=last week, etc).\nAvailable/awake hours per day: ${awakeTxt} (Auto-Schedule and bulk commands only place/move blocks inside each day's window; pinned blocks are never moved).\nBlocks visible in the currently viewed week: ${blocksTxt || 'none'}`;
+}
+
+function dayNameToIdx(name){
+  if(!name) return null;
+  name = String(name).toLowerCase();
+  if(name==='today') return todayIdx();
+  if(name==='tomorrow') return (todayIdx()+1)%7;
+  if(name==='all' || name==='every day' || name==='everyday') return 'all';
+  if(name==='weekday' || name==='weekdays') return 'weekdays';
+  if(name==='weekend' || name==='weekends') return 'weekends';
+  const idx = DAYS.findIndex(d=>d.toLowerCase()===name.slice(0,3));
+  return idx>=0?idx:null;
+}
+
+function expandDayGroup(d){
+  if(d==='all') return [0,1,2,3,4,5,6];
+  if(d==='weekdays') return [0,1,2,3,4];
+  if(d==='weekends') return [5,6];
+  if(d===null) return [];
+  return [d];
+}
+
+function localParseCommand(text){
+  const t = text.toLowerCase();
+  let m = t.match(/^(?:go to |show |view |take me to )?next week$/);
+  if(m) return { action:'go_to_week', params:{ weeks: state.weekOffset+1 } };
+  m = t.match(/^(?:go to |show |view |take me to )?(?:last|previous) week$/);
+  if(m) return { action:'go_to_week', params:{ weeks: state.weekOffset-1 } };
+  m = t.match(/^(?:go to |show |view |take me to )?this week$/) || t.match(/^today$/);
+  if(m) return { action:'go_to_week', params:{ weeks: 0 } };
+  m = t.match(/(\d+)\s+weeks?\s+(?:from now|ahead|out)/);
+  if(m) return { action:'go_to_week', params:{ weeks: parseInt(m[1]) } };
+  m = t.match(/move everything(?: on (\w+))? after (\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/);
+  if(m) return { action:'move_after', params:{ time:m[2], day:m[1]||'all' } };
+  m = t.match(/(clear|free up)\s+(\w+)/);
+  if(m) return { action:'clear_day', params:{ day:m[2] } };
+  m = t.match(/shift\s+(\w+)\s+(?:by\s+)?(-?\d+)\s*day/);
+  if(m) return { action:'shift_day', params:{ day:m[1], offset:parseInt(m[2]) } };
+  m = t.match(/add\s+(\d+)\s*h(?:ours)?\s+(?:to|of)?\s*([a-z\s]+)/);
+  if(m) return { action:'add_hours', params:{ hours:parseInt(m[1]), category:m[2].trim() } };
+  m = t.match(/remove\s+(\d+)\s*h(?:ours)?\s+(?:from|of)?\s*([a-z\s]+)/);
+  if(m) return { action:'remove_hours', params:{ hours:parseInt(m[1]), category:m[2].trim() } };
+  m = t.match(/free up (?:the )?evening(?:s)?(?: on (\w+))?/);
+  if(m) return { action:'free_up_evening', params:{ day:m[1]||'today' } };
+  m = t.match(/don'?t\s+(?:auto[\s-]?)?schedule\s+before\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/);
+  if(m) return { action:'set_auto_window', params:{ start:m[1], day:'all' } };
+  m = t.match(/don'?t\s+(?:auto[\s-]?)?schedule\s+after\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/);
+  if(m) return { action:'set_auto_window', params:{ end:m[1], day:'all' } };
+  m = t.match(/(?:i'?m|im)\s+(?:only\s+)?(?:awake|available)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|to|until|till)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s+on\s+(\w+))?/);
+  if(m) return { action:'set_auto_window', params:{ start:m[1], end:m[2], day:m[3]||'all' } };
+  return null;
+}
+
+function findCatByName(name){
+  if(!name) return null;
+  const n = name.toLowerCase().trim();
+  return state.categories.find(c=>c.name.toLowerCase()===n) ||
+         state.categories.find(c=>c.name.toLowerCase().includes(n) || n.includes(c.name.toLowerCase()));
+}
+
+function applyAction(parsed){
+  if(!parsed || !parsed.action || parsed.action==='unknown'){
+    toast('Couldn\u2019t understand that command \u2014 try rephrasing.', true);
+    return;
+  }
+  const {action, params={}} = parsed;
+
+  if(action==='move_after'){
+    const hour = parseHourString(params.time);
+    if(hour===null){ toast('Couldn\u2019t read that time.', true); return; }
+    let dayIdx = dayNameToIdx(params.day || 'all');
+    const dayList = expandDayGroup(dayIdx).length ? expandDayGroup(dayIdx) : [0,1,2,3,4,5,6];
+    let movedCats = {};
+    dayList.forEach(d=>{
+      const toMove = state.blocks.filter(b=>b.day===d && b.start>=hour && !b.locked);
+      toMove.forEach(b=>{
+        movedCats[b.catId] = (movedCats[b.catId]||0) + (b.end-b.start);
+      });
+      state.blocks = state.blocks.filter(b=>!(b.day===d && b.start>=hour && !b.locked));
+    });
+    let total = 0, failed = 0;
+    Object.keys(movedCats).forEach(catId=>{
+      const cat = getCat(catId); if(!cat) return;
+      const need = movedCats[catId];
+      const placed = scheduleCategoryHours(cat, need);
+      total += placed; if(placed<need) failed += (need-placed);
+    });
+    mergeBlocks(); saveState(); renderAll();
+    if(total===0 && Object.keys(movedCats).length===0){ toast('Nothing found after that time (pinned blocks are left alone).'); }
+    else toast(`Moved ${total}h to new slots${failed>0?`, ${failed}h couldn\u2019t be placed`:''}.`, failed>0);
+    return;
+  }
+
+  if(action==='clear_day'){
+    const d = dayNameToIdx(params.day);
+    if(d===null || d==='all'){ toast('Which day did you mean?', true); return; }
+    const removed = state.blocks.filter(b=>b.day===d && !b.locked);
+    let movedCats = {};
+    removed.forEach(b=> movedCats[b.catId] = (movedCats[b.catId]||0) + (b.end-b.start));
+    state.blocks = state.blocks.filter(b=>!(b.day===d && !b.locked));
+    let total=0, failed=0;
+    Object.keys(movedCats).forEach(catId=>{
+      const cat = getCat(catId); if(!cat) return;
+      const need = movedCats[catId];
+      const placed = scheduleCategoryHours(cat, need);
+      total += placed; if(placed<need) failed += (need-placed);
+    });
+    mergeBlocks(); saveState(); renderAll();
+    toast(`Cleared ${DAYS[d]}. Rescheduled ${total}h${failed>0?`, ${failed}h couldn\u2019t be placed`:''}.`, failed>0);
+    return;
+  }
+
+  if(action==='shift_day'){
+    const d = dayNameToIdx(params.day);
+    if(d===null || d==='all'){ toast('Which day did you mean?', true); return; }
+    const offset = parseInt(params.offset)||1;
+    const targetDay = ((d+offset)%7+7)%7;
+    const toMove = state.blocks.filter(b=>b.day===d && !b.locked);
+    let moved=0, blocked=0;
+    toMove.forEach(b=>{
+      let conflict=false;
+      for(let h=b.start; h<b.end; h++){ if(isBusy(targetDay,h) || blockAt(targetDay,h)) conflict=true; }
+      if(conflict){ blocked++; }
+      else { b.day = targetDay; moved++; }
+    });
+    mergeBlocks(); saveState(); renderAll();
+    toast(`Shifted ${moved} block(s) from ${DAYS[d]} to ${DAYS[targetDay]}${blocked>0?`, ${blocked} couldn\u2019t move (conflict)`:''}.`, blocked>0);
+    return;
+  }
+
+  if(action==='add_hours'){
+    const cat = findCatByName(params.category);
+    if(!cat){ toast('Couldn\u2019t find that category.', true); return; }
+    const hrs = parseInt(params.hours)||0;
+    cat.target += hrs;
+    const placed = scheduleCategoryHours(cat, hrs);
+    mergeBlocks(); saveState(); renderAll();
+    toast(`${cat.name}: target +${hrs}h, placed ${placed}h on the grid.`);
+    return;
+  }
+
+  if(action==='remove_hours'){
+    const cat = findCatByName(params.category);
+    if(!cat){ toast('Couldn\u2019t find that category.', true); return; }
+    const hrs = parseInt(params.hours)||0;
+    cat.target = Math.max(0, cat.target-hrs);
+    let toRemove = hrs;
+    const catBlocks = state.blocks.filter(b=>b.catId===cat.id && !b.done && !b.locked).sort((a,b)=>b.day-a.day);
+    for(const b of catBlocks){
+      if(toRemove<=0) break;
+      const dur = b.end-b.start;
+      if(dur<=toRemove){ state.blocks = state.blocks.filter(x=>x.id!==b.id); toRemove-=dur; }
+      else { b.end -= toRemove; toRemove=0; }
+    }
+    mergeBlocks(); saveState(); renderAll();
+    toast(`${cat.name}: target -${hrs}h.`);
+    return;
+  }
+
+  if(action==='free_up_evening'){
+    const d = dayNameToIdx(params.day || 'today');
+    const dayList = expandDayGroup(d).length ? expandDayGroup(d) : [todayIdx()];
+    let movedCats = {};
+    dayList.forEach(day=>{
+      for(let h=18; h<24; h++){
+        const b = blockAt(day,h);
+        if(b && !b.locked){ movedCats[b.catId] = (movedCats[b.catId]||0) + 1; }
+        if(!b || !b.locked) state.busy.push(busyKey(day,h));
+      }
+    });
+    state.blocks = state.blocks.filter(b=>{
+      if(dayList.includes(b.day) && b.start>=18 && !b.locked){ return false; }
+      return true;
+    });
+    let total=0;
+    Object.keys(movedCats).forEach(catId=>{
+      const cat = getCat(catId); if(!cat) return;
+      total += scheduleCategoryHours(cat, movedCats[catId]);
+    });
+    mergeBlocks(); saveState(); renderAll();
+    toast(`Evenings freed up. Rescheduled ${total}h elsewhere.`);
+    return;
+  }
+
+  if(action==='add_block'){
+    const cat = findCatByName(params.category);
+    if(!cat){ toast('Couldn\u2019t find that category.', true); return; }
+    let dayList = [];
+    if(Array.isArray(params.days) && params.days.length){
+      dayList = params.days.map(dn=>dayNameToIdx(dn)).filter(x=>x!==null && x!=='all');
+    } else {
+      const d = dayNameToIdx(params.day);
+      dayList = expandDayGroup(d);
+    }
+    if(dayList.length===0){ toast('Which day(s) did you mean?', true); return; }
+    const startH = parseHourString(params.start);
+    const endH = parseHourString(params.end);
+    if(startH===null || endH===null || endH<=startH){ toast('Couldn\u2019t read that time range.', true); return; }
+    const repeat = params.repeat==='once' ? 'once' : 'weekly';
+    const force = !!params.force;
+    const targetWeek = repeat==='once' && typeof params.weeksFromNow==='number' ? params.weeksFromNow : state.weekOffset;
+    let placedDays=[], blockedDays=[];
+    dayList.forEach(d=>{
+      const conflict = checkConflict(d, startH, endH, null, targetWeek);
+      if(conflict && !force){ blockedDays.push(DAYS[d]); return; }
+      if(conflict && force){
+        for(let h=Math.floor(startH); h<Math.ceil(endH); h++){ state.busy = state.busy.filter(k=>k!==busyKey(d,h)); }
+        state.blocks = state.blocks.filter(b=>{
+          if(b.day!==d || !blockVisibleForWeek(b, targetWeek)) return true;
+          return !(b.start<endH && b.end>startH);
+        });
+      }
+      state.blocks.push({ id:uid('blk'), catId:cat.id, day:d, start:startH, end:endH, done:false, locked: !!params.locked, repeat, weekOffset: repeat==='once'?targetWeek:undefined });
+      placedDays.push(DAYS[d]);
+    });
+    mergeBlocks(); saveState(); renderAll();
+    const weekNote = repeat==='once' ? ` (week of ${fmtWeekLabel(targetWeek)})` : ' (repeating)';
+    if(placedDays.length) toast(`Added ${cat.name} on ${placedDays.join(', ')} ${fmtHour(startH)}\u2013${fmtHour(endH)}${params.locked?' (pinned)':''}${weekNote}.`);
+    if(blockedDays.length) toast(`${blockedDays.join(', ')} already taken \u2014 say "force" to override.`, true);
+    return;
+  }
+
+  if(action==='go_to_week'){
+    const weeks = parseInt(params.weeks);
+    if(isNaN(weeks)){ toast('Which week did you mean?', true); return; }
+    goToWeek(weeks);
+    toast(`Now viewing the week of ${fmtWeekLabel(state.weekOffset)}.`);
+    return;
+  }
+
+  if(action==='delete_blocks'){
+    const d = params.day && params.day!=='all' ? dayNameToIdx(params.day) : 'all';
+    const cat = params.category && params.category!=='all' ? findCatByName(params.category) : null;
+    const before = state.blocks.length;
+    state.blocks = state.blocks.filter(b=>{
+      const dayMatch = d==='all' || d===null ? true : b.day===d;
+      const catMatch = cat ? b.catId===cat.id : true;
+      return !(dayMatch && catMatch);
+    });
+    saveState(); renderAll();
+    toast(`Removed ${before-state.blocks.length} block(s).`);
+    return;
+  }
+
+  if(action==='lock_blocks' || action==='unlock_blocks'){
+    const lock = action==='lock_blocks';
+    const d = params.day && params.day!=='all' ? dayNameToIdx(params.day) : 'all';
+    const cat = params.category && params.category!=='all' ? findCatByName(params.category) : null;
+    let count=0;
+    state.blocks.forEach(b=>{
+      const dayMatch = d==='all' || d===null ? true : b.day===d;
+      const catMatch = cat ? b.catId===cat.id : true;
+      if(dayMatch && catMatch){ b.locked = lock; count++; }
+    });
+    mergeBlocks(); saveState(); renderAll();
+    toast(`${lock?'Pinned':'Unpinned'} ${count} block(s).`);
+    return;
+  }
+
+  if(action==='set_target'){
+    const cat = findCatByName(params.category);
+    if(!cat){ toast('Couldn\u2019t find that category.', true); return; }
+    cat.target = Math.max(0, parseInt(params.hours)||0);
+    saveState(); renderAll();
+    toast(`${cat.name} target set to ${cat.target}h.`);
+    return;
+  }
+
+  if(action==='set_priority'){
+    const cat = findCatByName(params.category);
+    if(!cat){ toast('Couldn\u2019t find that category.', true); return; }
+    cat.priority = Math.max(1, Math.min(3, parseInt(params.level)||cat.priority));
+    saveState(); renderAll();
+    toast(`${cat.name} priority updated.`);
+    return;
+  }
+
+  if(action==='rename_category'){
+    const cat = findCatByName(params.category);
+    if(!cat){ toast('Couldn\u2019t find that category.', true); return; }
+    cat.name = params.newName || cat.name;
+    saveState(); renderAll();
+    toast('Category renamed.');
+    return;
+  }
+
+  if(action==='mark_busy' || action==='mark_free'){
+    const d = dayNameToIdx(params.day);
+    const dayList = expandDayGroup(d).length ? expandDayGroup(d) : [todayIdx()];
+    const startH = parseHourString(params.start);
+    const endH = parseHourString(params.end);
+    if(startH===null||endH===null||endH<=startH){ toast('Couldn\u2019t read that time range.', true); return; }
+    dayList.forEach(day=>{
+      for(let h=startH; h<endH; h++){
+        const key = busyKey(day,h);
+        if(action==='mark_busy'){ if(!state.busy.includes(key) && !blockAt(day,h)) state.busy.push(key); }
+        else { state.busy = state.busy.filter(k=>k!==key); }
+      }
+    });
+    saveState(); renderAll();
+    toast(action==='mark_busy'?'Marked that time as unavailable.':'Freed up that time.');
+    return;
+  }
+
+  if(action==='set_auto_window'){
+    const s = parseHourString(params.start);
+    const e = parseHourString(params.end);
+    const dParam = params.day || 'all';
+    const dIdx = dayNameToIdx(dParam);
+    const days = expandDayGroup(dIdx).length ? expandDayGroup(dIdx) : [0,1,2,3,4,5,6];
+    days.forEach(day=>{
+      const win = state.awakeWindows[day] || { start:8, end:22 };
+      const newStart = s===null ? win.start : Math.max(START_HOUR, s);
+      const newEnd = e===null ? win.end : Math.min(END_HOUR, e);
+      state.awakeWindows[day] = { start:newStart, end: Math.max(newStart+1, newEnd) };
+    });
+    if(dIdx==='all' || days.length===7){ state.sameAwakeEveryDay = true; }
+    else { state.sameAwakeEveryDay = false; }
+    saveState(); renderAll();
+    toast(`Updated available/awake hours for ${dIdx==='all'||days.length===7?'every day':days.map(x=>DAYS[x]).join(', ')}.`);
+    return;
+  }
+
+  toast('Couldn\u2019t understand that command \u2014 try rephrasing.', true);
+}
+
+async function runCommand(text){
+  if(!text || !text.trim()) return;
+  const input = document.getElementById('cmd-input');
+  input.disabled = true;
+  const local = localParseCommand(text);
+  try{
+    const systemPrompt = `You convert free-form weekly-schedule requests into JSON, and ONLY JSON (no markdown fences, no explanation).
+Output either a single action object {"action": "...", "params": {...}}, or, for compound requests with multiple steps, {"actions": [ {"action":"...","params":{...}}, ... ]}.
+
+Allowed actions and their params:
+- move_after: {"time":"17:00 or 5pm","day":"Mon|Tue|Wed|Thu|Fri|Sat|Sun|today|tomorrow|weekday|weekend|all"} — moves unpinned blocks after a time to new open slots
+- clear_day: {"day":"Mon..Sun|today|tomorrow"} — removes unpinned blocks from a day and reschedules them
+- shift_day: {"day":"...", "offset": integer number of days} — moves a day's unpinned blocks N days later/earlier
+- add_hours: {"hours": integer, "category": "name"} — increases weekly target and auto-places the extra hours
+- remove_hours: {"hours": integer, "category": "name"} — decreases weekly target and removes hours
+- free_up_evening: {"day":"...|all"} — clears unpinned evening (6pm-midnight) blocks and reschedules elsewhere
+- add_block: {"day":"Mon..Sun|today|tomorrow|weekday|weekend|all","days":["Mon","Wed","Fri"] (optional, use instead of "day" for multiple specific days at the same time),"category":"name","start":"9am","end":"11am","locked":true|false,"repeat":"weekly"|"once","force":true|false} — manually places a block at an exact time on one or more days. "locked":true (pin) means Auto-Schedule won't move it. "repeat":"once" means it only applies to the week currently being viewed (a specific one-time occurrence); "weekly" (default) means it repeats every week. "force":true means override/replace whatever already occupies that slot instead of refusing on conflict.
+- delete_blocks: {"day":"Mon..Sun|all","category":"name|all"} — deletes matching blocks entirely (no reschedule)
+- lock_blocks / unlock_blocks: {"day":"Mon..Sun|all","category":"name|all"} — pins/unpins matching existing blocks so Auto-Schedule and bulk commands leave them alone
+- set_target: {"category":"name","hours":integer} — sets a category's weekly target hours directly
+- set_priority: {"category":"name","level":1|2|3} — 1=low,2=med,3=high
+- rename_category: {"category":"name","newName":"new name"}
+- mark_busy / mark_free: {"day":"...|all","start":"6am","end":"8am"} — marks/clears a time range as unavailable for scheduling
+- set_auto_window: {"start":"8am" (optional),"end":"10pm" (optional),"day":"Mon..Sun|weekday|weekend|all"} — sets exact available/awake hours (any specific time, e.g. "7:30am") that Auto-Schedule and bulk commands are allowed to use for NEW placements, either for one specific day, a group (weekday/weekend), or all days. Omit start or end to leave that side unchanged for the targeted day(s). E.g. "don't schedule before 8am" -> {start:"8am", day:"all"}; "I'm only awake 7am-11pm on weekends" -> {start:"7am", end:"11pm", day:"weekend"}; "I go to bed at 11:30pm on Fridays" -> {end:"11:30pm", day:"Fri"}.
+- go_to_week: {"weeks": integer} — navigates the calendar view to a different week, where 0 = the real current week, 1 = next week, -1 = last week, 2 = two weeks from now, etc. Use this for phrases like "go to next week", "show me 3 weeks from now", "go back to last week", "take me to this week"/"today" (weeks:0).
+- unknown: {} — use if the request doesn't match anything above
+
+Notes:
+- "Pin"/"lock"/"always keep" language means locked:true or the lock_blocks action (Auto-Schedule won't move it). "Force"/"override" language for placing a new block means force:true (replace whatever is already there) — this is different from pin/lock.
+- Manually adding one or more specific blocks at an exact time is always add_block, regardless of the available/awake window (manual placements ignore that window). Use "days" (array) whenever the user names 2+ specific days for the same time slot, e.g. "block gym Mon/Wed/Fri 6-7am" -> days:["Mon","Wed","Fri"].
+- Requests about when the user is awake, available, asleep, or "don't schedule before/after X" (optionally for specific days or weekdays/weekends) are always set_auto_window, and exact times including minutes (e.g. "7:15am") should be preserved exactly.
+- Default repeat is "weekly" (recurring every week) unless the user clearly means only the currently-viewed week (e.g. "just this week", "only this once", "this week only", "one time") in which case use "once".
+- If the user references a category loosely (e.g. "gym" for "Gym"), match it to the closest existing category name.
+- The user may ask to navigate weeks ("next week", "go back", "3 weeks from now") — use go_to_week for that, relative to the real current week (weekOffset 0), not relative to whatever week happens to be currently viewed.
+Current schedule state:
+${buildStateSummary()}`;
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:1000,
+        system: systemPrompt,
+        messages:[{ role:'user', content:text }]
+      })
+    });
+    const data = await resp.json();
+    const raw = (data.content||[]).map(c=>c.text||'').join('').trim();
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    if(parsed && Array.isArray(parsed.actions)){
+      parsed.actions.forEach(a=>applyAction(a));
+    } else {
+      applyAction(parsed);
+    }
+  }catch(e){
+    if(local) applyAction(local);
+    else toast('Couldn\u2019t reach the parser and couldn\u2019t match a known pattern \u2014 try e.g. "move everything after 5pm".', true);
+  }
+  input.disabled = false;
+  input.value = '';
+  input.focus();
+}
+
+/* ==================== RENDER: week nav ==================== */
+function renderWeekNav(){
+  document.getElementById('week-label').textContent = fmtWeekLabel(state.weekOffset);
+  document.getElementById('week-today-btn').classList.toggle('at-today', isViewingRealToday());
+}
+
+/* ==================== INIT / EVENTS ==================== */
+function renderAll(){
+  renderCategories();
+  renderEnergy();
+  renderAutoWindow();
+  renderWeekNav();
+  renderHourLabels();
+  renderGrid();
+  renderDashboard();
+}
+
+document.getElementById('cmd-submit-btn').addEventListener('click', ()=>{
+  runCommand(document.getElementById('cmd-input').value);
+});
+document.getElementById('cmd-input').addEventListener('keydown', (e)=>{
+  if(e.key==='Enter') runCommand(e.target.value);
+});
+document.getElementById('week-prev-btn').addEventListener('click', ()=> goToWeek(state.weekOffset-1));
+document.getElementById('week-next-btn').addEventListener('click', ()=> goToWeek(state.weekOffset+1));
+document.getElementById('week-today-btn').addEventListener('click', ()=> goToWeek(0));
+document.getElementById('auto-schedule-btn').addEventListener('click', ()=>{
+  autoScheduleWeek(true);
+  saveState(); toast('Week re-scheduled from targets and energy levels within your available/awake hours. Pinned blocks were left in place.');
+  renderAll();
+});
+document.getElementById('theme-toggle').addEventListener('click', ()=>{
+  state.darkMode = !state.darkMode;
+  document.body.classList.toggle('light', !state.darkMode);
+  saveState();
+});
+document.getElementById('signout-btn').addEventListener('click', ()=>{
+  auth.signOut();
+});
+</script>
+</body>
+</html>
